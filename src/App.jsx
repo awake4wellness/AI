@@ -231,14 +231,23 @@ export const CoreServices = {
       return demo;
     }
     const res = await fetch("/api/chat", {
+
       method: "POST",
+
       headers: { "Content-Type": "application/json" },
+
       body: JSON.stringify({ messages, system: systemPrompt }),
+
     });
+
     const data = await res.json();
+
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+
     const full = data.text || "";
+
     onChunk && onChunk(full);
+
     return full;
   },
 };
@@ -303,7 +312,6 @@ function DashboardPlugin({ patients, sessions, navigate }) {
   const mejoria = sessions.filter(s => s.eva_pre && s.eva_post).length
     ? Math.round(sessions.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / sessions.filter(s => s.eva_pre && s.eva_post).length)
     : 0;
-
   return (
     <div>
       <div style={{ marginBottom: 28 }}>
@@ -316,8 +324,6 @@ function DashboardPlugin({ patients, sessions, navigate }) {
         <StatCard label="Mejoría Promedio" value={`${mejoria}%`} color={C.purple} icon="📈" sub="reducción dolor" />
         <StatCard label="Módulos Activos" value={pluginRegistry.length} color={C.warning} icon="🔌" sub="conectados" />
       </div>
-
-      {/* Quick access to plugins */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>ACCESO RÁPIDO — MÓDULOS</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
@@ -331,8 +337,6 @@ function DashboardPlugin({ patients, sessions, navigate }) {
           ))}
         </div>
       </div>
-
-      {/* Recent sessions */}
       <Card>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>ACTIVIDAD RECIENTE</div>
         {sessions.slice(0, 5).map(ses => {
@@ -425,11 +429,9 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
       <Modal open={showModal} onClose={() => setShowModal(false)} title="Nuevo Paciente" width={620}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
-          {/* Nombre y Apellido */}
           <Input label="Nombre" value={form.nombre} onChange={e => upd("nombre", e.target.value)} placeholder="Carlos" />
           <Input label="Apellido" value={form.apellido} onChange={e => upd("apellido", e.target.value)} placeholder="Mendoza" />
 
-          {/* Fecha de nacimiento */}
           <div>
             <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6 }}>Fecha de Nacimiento</label>
             <input
@@ -440,10 +442,8 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
             />
           </div>
 
-          {/* Edad */}
           <Input label="Edad (años)" type="number" value={form.edad} onChange={e => upd("edad", e.target.value)} placeholder="34" />
 
-          {/* Sexo — fila completa */}
           <div style={{ gridColumn: "1/-1" }}>
             <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 8 }}>Sexo</label>
             <div style={{ display: "flex", gap: 8 }}>
@@ -462,19 +462,15 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
             </div>
           </div>
 
-          {/* Teléfono y Email */}
           <Input label="Teléfono / WhatsApp" value={form.telefono} onChange={e => upd("telefono", e.target.value)} placeholder="+1 555 0000" />
           <Input label="Email" value={form.email} onChange={e => upd("email", e.target.value)} placeholder="carlos@email.com" />
 
-          {/* Condición principal — fila completa */}
           <div style={{ gridColumn: "1/-1" }}>
             <Input label="Condición Principal" value={form.condicion_principal} onChange={e => upd("condicion_principal", e.target.value)} placeholder="Ej: Tendinopatía rotuliana, Dolor lumbar crónico..." />
           </div>
 
-          {/* Deporte */}
           <Input label="Deporte principal" value={form.deporte} onChange={e => upd("deporte", e.target.value)} placeholder="Ej: Tenis, Pickleball, Golf..." />
 
-          {/* Nivel actividad */}
           <div>
             <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 8 }}>Nivel de Actividad</label>
             <div style={{ display: "flex", gap: 4 }}>
@@ -503,8 +499,7 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🎙️ DICTADO CLÍNICO POR VOZ — Auto-llenado con GPT-4o
-// Web Speech API + Whisper + GPT-4o
+// 🎙️ DICTADO CLÍNICO POR VOZ — Auto-llenado
 // ═══════════════════════════════════════════════════════════════
 
 function useSpeechRecognition() {
@@ -611,7 +606,7 @@ function DictadoClinico({ patient, onAutoFill, C }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>🎙️ Dictado Clínico con IA</div>
-          <div style={{ fontSize: 11, color: C.muted }}>Habla durante la consulta — GPT-4o auto-llena la historia clínica</div>
+          <div style={{ fontSize: 11, color: C.muted }}>Habla durante la consulta — la IA auto-llena la historia clínica</div>
         </div>
         {phase === "recording" && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.dangerDim, border: `1px solid ${C.danger}30`, borderRadius: 20, padding: "5px 14px" }}>
@@ -621,7 +616,6 @@ function DictadoClinico({ patient, onAutoFill, C }) {
         )}
       </div>
 
-      {/* Controles */}
       {phase === "idle" && (
         <button onClick={iniciar} style={{ width: "100%", padding: "14px", borderRadius: 12, background: "rgba(239,68,68,0.12)", border: `1px solid rgba(239,68,68,0.35)`, color: C.danger, fontSize: 15, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
           🎙️ Iniciar grabación de consulta
@@ -630,7 +624,6 @@ function DictadoClinico({ patient, onAutoFill, C }) {
 
       {phase === "recording" && (
         <div>
-          {/* Transcript en vivo */}
           <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 14, marginBottom: 14, minHeight: 80, maxHeight: 200, overflowY: "auto", border: `1px solid ${C.border}` }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8 }}>TRANSCRIPCIÓN EN VIVO</div>
             {transcript ? (
@@ -655,7 +648,7 @@ function DictadoClinico({ patient, onAutoFill, C }) {
         <div style={{ textAlign: "center", padding: "24px 0" }}>
           <div style={{ fontSize: 32, marginBottom: 12, animation: "spin 2s linear infinite", display: "inline-block" }}>🧠</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Analizando consulta con IA...</div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>GPT-4o está procesando y estructurando la información clínica</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>Procesando y estructurando la información clínica</div>
         </div>
       )}
 
@@ -721,7 +714,6 @@ function DictadoClinico({ patient, onAutoFill, C }) {
 function HistoriaClinicaV3({ patient, C }) {
   const [seccion, setSeccion] = useState("s1");
   const [hc, setHc] = useState({
-    // S1 Datos
     nombre: patient?.nombre + " " + patient?.apellido || "",
     fecha_nacimiento: "",
     edad: patient?.edad || "",
@@ -729,37 +721,26 @@ function HistoriaClinicaV3({ patient, C }) {
     documento: "", telefono: "", email: patient?.email || "",
     ocupacion: "", nivel_actividad: patient?.nivel_actividad || "",
     deporte: "", fecha_consulta: new Date().toLocaleDateString("es-ES"),
-    // S2 Motivo
     motivo: "", eva: 0, tipo_dolor: [], localizacion: "", patron: "", irradiacion: "",
-    // S3 Enfermedad
     inicio: "", evolucion: "", agravantes: "", aliviantes: "", trat_previos: "", estudios_previos: "",
-    // S4 Antecedentes
     ant_medicos: "", ant_quirurgicos: "", ant_trauma: "", alergias: "", medicamentos: "", ant_deportivos: "", ant_laborales: "", ant_familiares: "",
-    // S4 Killer Practical — lesiones sospechadas
     lesiones_sospecha: {},
-    // S5 Evaluación física
     mecanismo: {}, inspeccion: [], palpacion: "", movilidad: "", fuerza: "",
     pruebas_ortopedicas: {}, red_flags: {},
-    // S6 Módulos especializados
     psqi: 0, isi: 0, epworth: 0, horas_sueno: 7,
     dix_hallpike: "negativo", dhi: 0, red_flags_vestibular: false,
     cadenas: {}, causa_funcional: "",
     vitD: "", cortisol: "", pcr: "", tsh: "", glucosa: "", magnesio: "",
     suplementos: {},
-    // S7 Tecnología
     termografia: {}, ecografia: [],
-    // S8 Diagnóstico
     dx_estructural: "", dx_funcional: "", dx_sistemica: "", dx_neurologica: "",
     grado_estructural: "", grado_funcional: "", grado_sistemica: "", grado_neurologica: "",
     dx_principal: "", dx_secundarios: "",
-    // S9 Plan
     hilt_potencia: "", hilt_energia: "", hilt_modo: "", hilt_duracion: "", hilt_zona: "", hilt_sesiones: "",
     crioterapia_modalidad: "", crioterapia_timing: "",
     biowave: false, bemer: false, tens: false, acupuntura: false,
     rehab_fase: "",
-    // S10 Seguimiento
     seguimiento: [], alta: "",
-    // Notas
     notas: "",
   });
 
@@ -832,13 +813,11 @@ function HistoriaClinicaV3({ patient, C }) {
       dx_principal: data.dx_principal || prev.dx_principal,
       notas: data.nota_soap ? `SOAP:\nS: ${data.nota_soap.subjetivo || ""}\nO: ${data.nota_soap.objetivo || ""}\nA: ${data.nota_soap.analisis || ""}\nP: ${data.nota_soap.plan || ""}` : prev.notas,
     }));
-    // Ir a sección de motivo para revisar
     setSeccion("s2");
   }
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 20 }}>
-      {/* Sidebar navegación */}
       <div>
         <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 12, padding: 10, position: "sticky", top: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, color: C.dim, letterSpacing: 2, padding: "0 6px", marginBottom: 8 }}>HISTORIA CLÍNICA v3</div>
@@ -855,21 +834,16 @@ function HistoriaClinicaV3({ patient, C }) {
         </div>
       </div>
 
-      {/* Contenido */}
       <div>
-        {/* 🎙️ DICTADO CLÍNICO — siempre visible */}
         <DictadoClinico patient={patient} onAutoFill={autoFillFromVoice} C={C} />
-        {/* S1 — Datos del Paciente */}
         {seccion === "s1" && <div>
           {sec("1. DATOS DEL PACIENTE")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
-            {/* Nombre completo — fila entera */}
             <div style={{ gridColumn: "1/-1" }}>
               {lbl("Nombre completo")}{inp("nombre", "Carlos Mendoza")}
             </div>
 
-            {/* Fecha de nacimiento */}
             <div>
               {lbl("Fecha de nacimiento")}
               <input
@@ -880,10 +854,8 @@ function HistoriaClinicaV3({ patient, C }) {
               />
             </div>
 
-            {/* Edad */}
             <div>{lbl("Edad (años)")}{inp("edad", "34")}</div>
 
-            {/* Sexo — fila entera con botones */}
             <div style={{ gridColumn: "1/-1" }}>
               {lbl("Sexo")}
               <div style={{ display: "flex", gap: 8 }}>
@@ -906,25 +878,13 @@ function HistoriaClinicaV3({ patient, C }) {
               </div>
             </div>
 
-            {/* Documento */}
             <div>{lbl("Documento de identidad")}{inp("documento", "Ej: 123456789")}</div>
-
-            {/* Teléfono */}
             <div>{lbl("Teléfono / WhatsApp")}{inp("telefono", "+1 555 0000")}</div>
-
-            {/* Email */}
             <div>{lbl("Correo electrónico")}{inp("email", "paciente@email.com")}</div>
-
-            {/* Ocupación */}
             <div>{lbl("Ocupación")}{inp("ocupacion", "Ej: Deportista, Oficinista...")}</div>
-
-            {/* Deporte */}
             <div>{lbl("Deporte principal")}{inp("deporte", "Ej: Tenis, Pickleball, Golf...")}</div>
-
-            {/* Fecha consulta */}
             <div>{lbl("Fecha de consulta")}{inp("fecha_consulta", "")}</div>
 
-            {/* Nivel actividad — fila entera */}
             <div style={{ gridColumn: "1/-1" }}>
               {lbl("Nivel de actividad física")}
               <div style={{ display: "flex", gap: 6 }}>
@@ -943,7 +903,6 @@ function HistoriaClinicaV3({ patient, C }) {
           </div>
         </div>}
 
-        {/* S2 — Motivo de Consulta */}
         {seccion === "s2" && <div>
           {sec("2. MOTIVO DE CONSULTA")}
           <div style={{ marginBottom: 16 }}>{lbl("Motivo principal")}{inp("motivo", "Descripción detallada del motivo de consulta...", true)}</div>
@@ -968,7 +927,6 @@ function HistoriaClinicaV3({ patient, C }) {
           </div>
         </div>}
 
-        {/* S3 — Enfermedad Actual */}
         {seccion === "s3" && <div>
           {sec("3. ENFERMEDAD ACTUAL")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -981,7 +939,6 @@ function HistoriaClinicaV3({ patient, C }) {
           </div>
         </div>}
 
-        {/* S4 — Antecedentes + Killer Practical */}
         {seccion === "s4" && <div>
           {sec("4. ANTECEDENTES + DIAGNÓSTICO DIFERENCIAL — KILLER PRACTICAL")}
           {alertBox("📋 Integra antecedentes con diagnóstico diferencial según el Killer Practical Manual Clínico. Marca la lesión sospechada según el mecanismo y hallazgos.", C.teal)}
@@ -1054,7 +1011,6 @@ function HistoriaClinicaV3({ patient, C }) {
           )}
         </div>}
 
-        {/* S5 — Evaluación Física + Algoritmo KP */}
         {seccion === "s5" && <div>
           {sec("5. EVALUACIÓN FÍSICA — ALGORITMO KILLER PRACTICAL")}
           {alertBox("🔬 Algoritmo: Historia → Mecanismo → Inspección → Palpación → Movilidad → Fuerza → Pruebas ortopédicas → Red flags", C.teal)}
@@ -1135,7 +1091,6 @@ function HistoriaClinicaV3({ patient, C }) {
           ].map(([id, label]) => toggleOpt("red_flags", id, label, C.danger))}
         </div>}
 
-        {/* S6 — Módulos Especializados */}
         {seccion === "s6" && <div>
           {sec("6. MÓDULOS DE EVALUACIÓN ESPECIALIZADA")}
 
@@ -1184,7 +1139,6 @@ function HistoriaClinicaV3({ patient, C }) {
           </div>
         </div>}
 
-        {/* S7 — Tecnología */}
         {seccion === "s7" && <div>
           {sec("7. EVALUACIÓN CON TECNOLOGÍA")}
           {alertBox("📋 Protocolo TISEM: Aclimatación ≥15 min · Sala 21-25°C · Piel expuesta · Sin cremas ni vendajes", C.teal)}
@@ -1218,7 +1172,6 @@ function HistoriaClinicaV3({ patient, C }) {
           </div>
         </div>}
 
-        {/* S8 — Diagnóstico 4 Capas */}
         {seccion === "s8" && <div>
           {sec("8. DIAGNÓSTICO INTEGRAL — 4 CAPAS CLÍNICAS")}
           {[
@@ -1245,7 +1198,6 @@ function HistoriaClinicaV3({ patient, C }) {
           <div>{lbl("Diagnósticos Secundarios")}{inp("dx_secundarios", "", true)}</div>
         </div>}
 
-        {/* S9 — Plan de Tratamiento */}
         {seccion === "s9" && <div>
           {sec("9. PLAN DE TRATAMIENTO INTEGRADO")}
 
@@ -1298,7 +1250,6 @@ function HistoriaClinicaV3({ patient, C }) {
           </div>
         </div>}
 
-        {/* S10 — Seguimiento */}
         {seccion === "s10" && <div>
           {sec("10. SEGUIMIENTO Y EVOLUCIÓN")}
           <div style={{ marginBottom: 20 }}>
@@ -1342,7 +1293,6 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
 
   async function save() { setSaving(true); await onAddSession({ ...form, paciente_id: patient.id, numero_sesion: patSess.length + 1 }); setShowModal(false); setSaving(false); }
 
-  // Get plugins that have patient actions
   const patientPlugins = plugins.filter(p => p.patientAction);
 
   return (
@@ -1359,7 +1309,6 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
             <Badge color={C.warning}>Mejoría {mej}%</Badge>
           </div>
         </div>
-        {/* Plugin action buttons — se agregan automáticamente */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {patientPlugins.map(plugin => (
             <button key={plugin.id} onClick={() => plugin.onPatientAction(patient, navigate)} style={{ background: dim(plugin.color), border: `1px solid ${plugin.color}30`, color: plugin.color, borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -1575,14 +1524,12 @@ Devuelve este JSON:
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
         {[{ id: "camara", l: "📷 Cámara FLIR" }, { id: "subir", l: "📤 Subir imagen" }, { id: "galeria", l: `🗂️ Galería (${imagenes.length})` }, { id: "comparar", l: "⚖️ Comparar" }].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.thermo : C.muted, borderBottom: tab === t.id ? `2px solid ${C.thermo}` : "2px solid transparent" }}>{t.l}</button>
         ))}
       </div>
 
-      {/* TAB: CÁMARA */}
       {tab === "camara" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20 }}>
           <div>
@@ -1630,7 +1577,6 @@ Devuelve este JSON:
         </div>
       )}
 
-      {/* TAB: SUBIR IMAGEN */}
       {tab === "subir" && (
         <div style={{ maxWidth: 600 }}>
           <div style={{ background: C.surface, border: `2px dashed ${C.border}`, borderRadius: 16, padding: 32, textAlign: "center", marginBottom: 24, cursor: "pointer" }}
@@ -1670,7 +1616,6 @@ Devuelve este JSON:
         </div>
       )}
 
-      {/* TAB: GALERÍA */}
       {tab === "galeria" && (
         <div>
           {selectedImg ? (
@@ -1678,7 +1623,6 @@ Devuelve este JSON:
               <button onClick={() => { setSelectedImg(null); setAnalisisIA(null); }} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, marginBottom: 20, padding: 0 }}>← Galería</button>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20 }}>
                 <div>
-                  {/* Imagen */}
                   <div style={{ background: "#050A14", borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 14, minHeight: 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {selectedImg.url ? <img src={selectedImg.url} alt="termografía" style={{ width: "100%", objectFit: "contain", maxHeight: 360 }} />
                       : <div style={{ textAlign: "center", padding: 40 }}>
@@ -1687,7 +1631,6 @@ Devuelve este JSON:
                         <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>Vista previa simulada</div>
                       </div>}
                   </div>
-                  {/* Datos */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
                     {[{ l: "TSI", v: selectedImg.tsi, c: tsiColor(selectedImg.tsi) }, { l: "Asimetría", v: `Δ${selectedImg.asimetria}°C`, c: asimetriaColor(selectedImg.asimetria) }, { l: "Sesión", v: `#${selectedImg.sesion}`, c: C.primary }].map(d => (
                       <div key={d.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", textAlign: "center" }}>
@@ -1698,7 +1641,6 @@ Devuelve este JSON:
                   </div>
                   {selectedImg.notas && <div style={{ marginTop: 14, background: "rgba(255,255,255,0.02)", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: C.muted, border: `1px solid ${C.border}` }}>{selectedImg.notas}</div>}
                 </div>
-                {/* Panel análisis IA */}
                 <div>
                   <button onClick={() => analizarConIA(selectedImg)} disabled={analyzing} style={{ width: "100%", padding: "12px", borderRadius: 11, background: analyzing ? "rgba(255,255,255,0.03)" : "rgba(255,107,107,0.15)", border: `1px solid ${C.thermo}35`, color: C.thermo, fontSize: 13, fontWeight: 800, cursor: analyzing ? "not-allowed" : "pointer", marginBottom: 14 }}>
                     {analyzing ? "🧠 Analizando..." : "🧠 Analizar con IA"}
@@ -1736,7 +1678,7 @@ Devuelve este JSON:
                   {!analisisIA && !analyzing && (
                     <div style={{ background: C.surface, borderRadius: 12, padding: 20, border: `1px solid ${C.border}`, textAlign: "center" }}>
                       <div style={{ fontSize: 32, marginBottom: 8 }}>🧠</div>
-                      <div style={{ fontSize: 12, color: C.muted }}>Toca "Analizar con IA" para obtener interpretación clínica automática con GPT-4o</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>Toca "Analizar con IA" para obtener interpretación clínica automática</div>
                     </div>
                   )}
                 </div>
@@ -1744,7 +1686,6 @@ Devuelve este JSON:
             </div>
           ) : (
             <div>
-              {/* Evolución de asimetría */}
               {imagenes.length > 1 && (
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 20px", marginBottom: 20 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>EVOLUCIÓN ASIMETRÍA TÉRMICA (ΔT°C)</div>
@@ -1767,7 +1708,6 @@ Devuelve este JSON:
                 </div>
               )}
 
-              {/* Grid de imágenes */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
                 {imagenes.map(img => (
                   <div key={img.id} onClick={() => { setSelectedImg(img); setAnalisisIA(null); }}
@@ -1789,7 +1729,6 @@ Devuelve este JSON:
                     </div>
                   </div>
                 ))}
-                {/* Botón agregar */}
                 <div onClick={() => setTab("subir")} style={{ background: "rgba(255,255,255,0.02)", border: `2px dashed ${C.border}`, borderRadius: 14, minHeight: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 8, transition: "all 0.2s" }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = C.thermo; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}>
@@ -1802,7 +1741,6 @@ Devuelve este JSON:
         </div>
       )}
 
-      {/* TAB: COMPARAR */}
       {tab === "comparar" && (
         <div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
@@ -1834,7 +1772,6 @@ Devuelve este JSON:
             ))}
           </div>
 
-          {/* Análisis comparativo */}
           {compareA && compareB && (
             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 16 }}>📊 Análisis Comparativo</div>
@@ -1867,7 +1804,6 @@ Devuelve este JSON:
 
 // ═══════════════════════════════════════════════════════════════
 // 📚 BASE DE CONOCIMIENTO CLÍNICO — Solo Admin
-// Sistema RAG: PDFs → IA → Respuestas con fuentes
 // ═══════════════════════════════════════════════════════════════
 
 const KNOWLEDGE_BASE_DEMO = [
@@ -2047,7 +1983,6 @@ Devuelve los 3 resultados más relevantes:
         </div>
       </div>
 
-      {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 24 }}>
         {[{ l: "Libros", v: docs.length, c: C.primary, icon: "📚" }, { l: "Páginas totales", v: totalPaginas.toLocaleString(), c: C.success, icon: "📄" }, { l: "Fragmentos IA", v: totalChunks.toLocaleString(), c: C.purple, icon: "🧠" }, { l: "Procesados", v: docs.filter(d => d.estado === "procesado").length, c: C.teal, icon: "✅" }].map(s => (
           <div key={s.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", display: "flex", gap: 12, alignItems: "center" }}>
@@ -2057,14 +1992,12 @@ Devuelve los 3 resultados más relevantes:
         ))}
       </div>
 
-      {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
         {[{ id: "biblioteca", l: "📚 Biblioteca" }, { id: "buscar", l: "🔍 Buscar en libros" }, { id: "subir", l: "📤 Agregar fuente" }].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 18px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.primary : C.muted, borderBottom: tab === t.id ? `2px solid ${C.primary}` : "2px solid transparent" }}>{t.l}</button>
         ))}
       </div>
 
-      {/* BIBLIOTECA */}
       {tab === "biblioteca" && (
         <div>
           {selected ? (
@@ -2152,7 +2085,6 @@ Devuelve los 3 resultados más relevantes:
         </div>
       )}
 
-      {/* BUSCAR */}
       {tab === "buscar" && (
         <div style={{ maxWidth: 700 }}>
           <div style={{ background: C.warningDim, border: `1px solid ${C.warning}25`, borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 12, color: C.warning }}>
@@ -2194,7 +2126,6 @@ Devuelve los 3 resultados más relevantes:
         </div>
       )}
 
-      {/* SUBIR */}
       {tab === "subir" && (
         <div style={{ maxWidth: 600 }}>
           <div style={{ background: C.surface, border: `2px dashed ${C.border}`, borderRadius: 16, padding: 32, textAlign: "center", marginBottom: 24, cursor: "pointer" }}
@@ -2244,7 +2175,7 @@ function CopilotPlugin({ patient, user }) {
   const { C } = useApp();
   const rol = user?.rol || "medico";
 
-  const systemPrompt = `Eres el copiloto clínico IA de AWAKE4WELLNESS — Dr. Javier Cuartas.
+  const systemPrompt = `Eres Alex, el copiloto clínico IA de AWAKE4WELLNESS — Dr. Javier Cuartas.
 Expertise: termografía (ThermoHuman, TRI/TSI), ecografía musculoesquelética, HILT (1064nm Nd:YAG), crioterapia (-21°C), acupuntura, biorresonancia, rehabilitación progresiva, VALD, InBody, Bodygee, Garmin.
 
 BASE DE CONOCIMIENTO DISPONIBLE:
@@ -2270,7 +2201,7 @@ Responde en español clínico profesional y conciso.`;
     role: "assistant",
     content: rol === "admin"
       ? `Hola Dr. Cuartas 👑. Tengo acceso a **${KNOWLEDGE_BASE_DEMO.length} fuentes clínicas** (${KNOWLEDGE_BASE_DEMO.reduce((a, d) => a + d.paginas, 0).toLocaleString()} páginas indexadas).\n\nPuedo citar las fuentes específicas en mis respuestas. ¿En qué te ayudo?`
-      : `Hola, soy tu **copiloto clínico IA**${patient ? ` para **${patient.nombre} ${patient.apellido}**` : ""}.\n\n¿En qué puedo ayudarte hoy?`
+      : `Hola, soy Alex, tu **copiloto clínico IA**${patient ? ` para **${patient.nombre} ${patient.apellido}**` : ""}.\n\n¿En qué puedo ayudarte hoy?`
   }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -2310,7 +2241,6 @@ Responde en español clínico profesional y conciso.`;
           </button>
         ))}
 
-        {/* Panel de fuentes — solo Admin */}
         {rol === "admin" && (
           <div style={{ marginTop: 12, background: C.warningDim, border: `1px solid ${C.warning}25`, borderRadius: 10, padding: "10px 12px" }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.warning, marginBottom: 6 }}>👑 FUENTES ACTIVAS</div>
@@ -2322,7 +2252,7 @@ Responde en español clínico profesional y conciso.`;
         )}
 
         <div style={{ marginTop: "auto", background: AI_DEMO ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)", border: `1px solid ${AI_DEMO ? "rgba(245,158,11,0.25)" : "rgba(16,185,129,0.25)"}`, borderRadius: 10, padding: "10px 12px" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: AI_DEMO ? C.warning : C.success }}>{AI_DEMO ? "⚠️ Demo Mode" : "✓ Claude IA Activo"}</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: AI_DEMO ? C.warning : C.success }}>{AI_DEMO ? "⚠️ Demo Mode" : "✓ IA Activa"}</div>
           <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{AI_DEMO ? "Conecta tu API key" : `${KNOWLEDGE_BASE_DEMO.reduce((a, d) => a + d.chunks, 0).toLocaleString()} fragmentos indexados`}</div>
         </div>
       </div>
@@ -2429,8 +2359,6 @@ function PlaceholderPlugin({ name, icon, description, coming }) {
 
 // ═══════════════════════════════════════════════════════════════
 // ── PLUGIN: MOTOR CENTRAL DIAGNÓSTICO ──────────────────────────
-// Cruza 9 módulos → 4 capas → Protocolo automático
-// Basado en: Killer Practical + Framework AW4W
 // ═══════════════════════════════════════════════════════════════
 const LESIONES_KP = {
   musculares:[
@@ -2480,35 +2408,27 @@ function runMotorDx(data) {
                 endocrino:false,nutricion:false,acupuntura:false},
     alertas:[],
   };
-  // Estructural
   const sel = Object.entries(data.lesiones||{}).filter(([,v])=>v).map(([k])=>{
     for(const cat of Object.values(LESIONES_KP)){const l=cat.find(x=>x.id===k);if(l)return l;}return null;
   }).filter(Boolean);
   if(sel.length){r.capas.estructural=sel.map(l=>l.label);r.protocolos.hilt=true;r.protocolos.crioterapia=true;r.protocolos.rehabilitacion=true;}
   if(data.lesiones?.dsg3||data.lesiones?.esq3){r.urgente=true;r.redFlags.push("Lesión Grado III — evaluar indicación quirúrgica");}
-  // Funcional
   const cad=Object.entries(data.cadenas||{}).filter(([,v])=>v>0).map(([k])=>k);
   if(cad.length){r.capas.funcional=cad.map(k=>({posterior:"Cadena posterior",anterior:"Cadena anterior",lat_d:"Lateral derecha",lat_i:"Lateral izquierda",espiral:"Cadena espiral"}[k]||k));r.protocolos.rehabilitacion=true;r.protocolos.acupuntura=true;}
-  // Sistémica
   if(data.sueno?.psqi>=5){r.capas.sistemica.push("Sueño alterado (PSQI ≥5)");r.protocolos.sueno=true;r.alertas.push("😴 Sueño alterado — impacta dolor e inflamación");}
   if(data.endocrino?.vitD_bajo){r.capas.sistemica.push("Deficiencia Vitamina D");r.protocolos.nutricion=true;}
   if(data.endocrino?.pcr_alta){r.capas.sistemica.push("Inflamación sistémica (PCR elevada)");r.protocolos.crioterapia=true;}
   if(data.nutricion?.deficiencias?.length>0){r.capas.sistemica.push(`Déficit: ${data.nutricion.deficiencias.join(", ")}`);r.protocolos.nutricion=true;}
-  // Neurológica
   if(data.vertigo?.dix_hallpike==="positivo_d"||data.vertigo?.dix_hallpike==="positivo_i"){r.capas.neurologica.push("VPPB (Dix-Hallpike +)");r.protocolos.vestibular=true;r.alertas.push("🌀 VPPB — iniciar maniobra de Epley");}
   if(data.vertigo?.red_flags){r.urgente=true;r.redFlags.push("🚨 Red flags neurológicas vestibulares");}
   if(data.lesiones?.ciat||data.lesiones?.radl||data.lesiones?.radc){r.capas.neurologica.push("Compresión radicular");r.protocolos.biowave=true;r.protocolos.acupuntura=true;}
   if(data.lesiones?.fibr){r.capas.neurologica.push("Fibromialgia — dolor central sensibilizado");r.protocolos.biowave=true;r.protocolos.bemer=true;}
   if(data.neuro?.dolor_persistente){r.capas.neurologica.push("Dolor persistente / sensibilización");r.protocolos.biowave=true;}
-  // Termografía
   if(data.termografia?.tsi==="hipertermico"){r.protocolos.crioterapia=true;r.alertas.push(`🌡️ TSI Hipertérmico — crioterapia indicada post-HILT`);}
   if(data.termografia?.asimetria>=1.5){r.alertas.push(`🌡️ Asimetría crítica Δ${data.termografia.asimetria}°C — confirmar con ecografía`);r.protocolos.hilt=true;}
-  // EVA
   if(data.eva>=8){r.urgente=true;r.alertas.push("⚠️ EVA ≥8 — dolor severo, priorizar analgesia");}
-  // Red flags
   if(data.neuro?.fiebre) r.redFlags.push("🚨 Fiebre — descartar infección");
   if(data.neuro?.esfinteres) r.redFlags.push("🚨 Alteración esfínteres — Síndrome cauda equina URGENTE");
-  // Grado
   const n=Object.values(r.capas).filter(v=>v.length>0).length;
   r.grado=n>=3?"III":n===2?"II":"I";
   return r;
@@ -2680,7 +2600,6 @@ function MotorCentralPlugin({patient}) {
         ))}
       </div>
     );
-    // RESULTADO
     if(!resultado) return null;
     const gc={I:{c:C.success,l:"Grado I — Leve"},II:{c:C.warning,l:"Grado II — Moderado"},III:{c:C.danger,l:"Grado III — Severo"}}[resultado.grado];
     const protos=[{id:"hilt",l:"⚡ HILT Láser",c:C.warning},{id:"crioterapia",l:"❄️ Crioterapia",c:C.primary},{id:"biowave",l:"🔌 BioWave",c:C.purple},{id:"bemer",l:"🔵 BEMER",c:C.teal},{id:"rehabilitacion",l:"💪 Rehabilitación",c:C.orange},{id:"acupuntura",l:"🎯 Acupuntura",c:C.success},{id:"sueno",l:"😴 Sueño",c:C.primary},{id:"vestibular",l:"🌀 Vestibular",c:C.teal},{id:"nutricion",l:"🥗 Nutrición",c:C.success}].filter(p=>resultado.protocolos[p.id]);
@@ -3008,7 +2927,7 @@ function PaymentsPlugin() {
   const [tab,setTab] = useState("plans");
   const plans = [
     {name:"Starter",price:149,color:C.muted,features:["3 pacientes activos","Historia clínica digital","Protocolos básicos","Sin IA clínica","Sin FLIR"],popular:false},
-    {name:"Professional",price:299,color:C.primary,features:["25 pacientes activos","Copiloto IA GPT-4o","Cámara FLIR integrada","Motor Central Dx","Telemedicina","Analytics avanzados"],popular:true},
+    {name:"Professional",price:299,color:C.primary,features:["25 pacientes activos","Copiloto IA","Cámara FLIR integrada","Motor Central Dx","Telemedicina","Analytics avanzados"],popular:true},
     {name:"Clinic",price:599,color:C.purple,features:["Pacientes ilimitados","Todo Professional","Multi-clínica","InBody + VALD + Bodygee","White-label","Soporte prioritario"],popular:false},
     {name:"Franchise",price:"custom",color:C.warning,features:["Modelo franquicia","Revenue sharing","Training completo","Territorio exclusivo","EB2-NIW support","Marketing"],popular:false},
   ];
@@ -3394,976 +3313,438 @@ Devuelve este JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ⌚ WEARABLES — Fitbit + Polar
-// OAuth2 → datos en tiempo real → integración clínica
+// ── PLUGIN: WEARABLES (Garmin / Polar / Fitbit) ────────────────
 // ═══════════════════════════════════════════════════════════════
-
 const DEMO_WEARABLE_DATA = {
-  fitbit: {
-    connected: true,
-    device: "Fitbit Charge 6",
-    battery: 78,
-    lastSync: "hace 12 min",
-    today: {
-      hr_reposo: 58, hr_max: 142, hr_actual: 67,
-      hrv: 42, spo2: 97, pasos: 6840, calorias: 1820,
-      estres: 32, recuperacion: 74, temperatura: 36.4,
-    },
-    sueno: { duracion: "7h 12m", profundo: "1h 45m", rem: "1h 20m", ligero: "3h 30m", despertares: 2, score: 81 },
-    hrTendencia: [62, 65, 58, 61, 67, 72, 68, 64, 59, 58, 60, 63, 67, 71, 65, 62, 58, 61, 64, 67, 63, 59, 58, 62],
-    semana: [
-      { dia: "Lun", pasos: 8200, hr: 61, hrv: 38, estres: 45 },
-      { dia: "Mar", pasos: 5400, hr: 64, hrv: 35, estres: 52 },
-      { dia: "Mié", pasos: 9100, hr: 59, hrv: 44, estres: 28 },
-      { dia: "Jue", pasos: 7300, hr: 62, hrv: 40, estres: 35 },
-      { dia: "Vie", pasos: 6840, hr: 67, hrv: 42, estres: 32 },
-      { dia: "Sáb", pasos: 0, hr: 0, hrv: 0, estres: 0 },
-      { dia: "Dom", pasos: 0, hr: 0, hrv: 0, estres: 0 },
-    ],
-  },
-  polar: {
-    connected: false,
-    device: "Polar H10",
-    battery: 0,
-    lastSync: "No conectado",
-    today: { hr_reposo: 0, hrv: 0, carga: 0, recuperacion: 0 },
-  },
+  conectado: true,
+  dispositivo: "Garmin Forerunner 965",
+  ultima_sync: "Hace 12 min",
+  hoy: { pasos: 8432, fc_reposo: 54, fc_max: 162, calorias: 2380, sueno_horas: 7.2, sueno_score: 82, estres: 34, body_battery: 68, spo2: 97, vo2max: 48 },
+  semana_fc: [58, 56, 55, 54, 57, 55, 54],
+  semana_sueno: [6.5, 7.1, 6.8, 7.5, 7.2, 8.0, 7.2],
+  semana_estres: [42, 38, 45, 30, 34, 28, 34],
+  semana_pasos: [7200, 9100, 6500, 10200, 8432, 11500, 8432],
 };
 
 function WearablesPlugin({ patient }) {
   const { C } = useApp();
-  const [provider, setProvider] = useState("fitbit");
   const [tab, setTab] = useState("resumen");
-  const [connecting, setConnecting] = useState(false);
-  const [data, setData] = useState(DEMO_WEARABLE_DATA);
-  const [alertas, setAlertas] = useState([]);
+  const d = DEMO_WEARABLE_DATA;
 
-  const d = data[provider];
-  const isConnected = d.connected;
-
-  function connect() {
-    setConnecting(true);
-    setTimeout(() => {
-      setData(prev => ({ ...prev, [provider]: { ...prev[provider], connected: true, lastSync: "ahora", battery: 85 } }));
-      setConnecting(false);
-      if (provider === "polar") {
-        setData(prev => ({
-          ...prev, polar: {
-            ...prev.polar, connected: true, lastSync: "ahora", battery: 85,
-            today: { hr_reposo: 52, hrv: 58, carga: 320, recuperacion: 82 },
-            sueno: { duracion: "7h 45m", profundo: "2h 10m", rem: "1h 30m", ligero: "3h 25m", despertares: 1, score: 88 },
-            semana: [
-              { dia: "Lun", hr: 54, hrv: 55, carga: 280, recuperacion: 78 },
-              { dia: "Mar", hr: 58, hrv: 48, carga: 410, recuperacion: 65 },
-              { dia: "Mié", hr: 52, hrv: 62, carga: 190, recuperacion: 88 },
-              { dia: "Jue", hr: 56, hrv: 51, carga: 350, recuperacion: 72 },
-              { dia: "Vie", hr: 52, hrv: 58, carga: 320, recuperacion: 82 },
-              { dia: "Sáb", hr: 0, hrv: 0, carga: 0, recuperacion: 0 },
-              { dia: "Dom", hr: 0, hrv: 0, carga: 0, recuperacion: 0 },
-            ],
-          }
-        }));
-      }
-      // Generar alertas automáticas
-      const nuevasAlertas = [];
-      if (data.fitbit.today.hrv < 35) nuevasAlertas.push({ tipo: "warning", msg: "HRV bajo — posible sobreentrenamiento o estrés" });
-      if (data.fitbit.today.spo2 < 95) nuevasAlertas.push({ tipo: "danger", msg: "SpO2 <95% — evaluar función respiratoria" });
-      if (data.fitbit.sueno.score < 70) nuevasAlertas.push({ tipo: "warning", msg: "Calidad de sueño reducida — impacta recuperación" });
-      setAlertas(nuevasAlertas);
-    }, 2000);
-  }
-
-  const hrColor = (hr) => hr > 100 ? C.danger : hr > 80 ? C.warning : C.success;
-  const hrvColor = (hrv) => hrv >= 50 ? C.success : hrv >= 35 ? C.warning : C.danger;
-  const stressColor = (s) => s <= 30 ? C.success : s <= 60 ? C.warning : C.danger;
+  const miniChart = (data, color, max, unit = "") => (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 70 }}>
+      {data.map((v, i) => {
+        const h = Math.max(8, (v / max) * 60);
+        return (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <div style={{ fontSize: 9, color, fontWeight: 700 }}>{v}{unit}</div>
+            <div style={{ width: "100%", height: h, background: color, borderRadius: "4px 4px 0 0", opacity: 0.75 }} />
+            <div style={{ fontSize: 8, color: C.dim }}>{["L", "M", "M", "J", "V", "S", "D"][i]}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>⌚ Wearables Clínicos</h2>
-          <p style={{ margin: "5px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `${patient.nombre} ${patient.apellido}` : "Sin paciente"} · Fitbit + Polar</p>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text }}>⌚ Wearables</h2>
+          <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `${patient.nombre} ${patient.apellido}` : ""} · {d.dispositivo}</p>
         </div>
-        {/* Selector de proveedor */}
-        <div style={{ display: "flex", gap: 6 }}>
-          {[{ id: "fitbit", label: "Fitbit", icon: "💙", color: "#00B0B9" }, { id: "polar", label: "Polar", icon: "❤️", color: "#D0021B" }].map(p => (
-            <button key={p.id} onClick={() => setProvider(p.id)} style={{ padding: "8px 16px", borderRadius: 20, border: `1px solid ${provider === p.id ? p.color + "50" : C.border}`, background: provider === p.id ? p.color + "15" : "transparent", color: provider === p.id ? p.color : C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-              {p.icon} {p.label}
-              {data[p.id].connected && <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.success, display: "inline-block" }} />}
-            </button>
-          ))}
+        <div style={{ background: C.successDim, border: `1px solid ${C.success}30`, borderRadius: 20, padding: "5px 14px", fontSize: 11, fontWeight: 700, color: C.success, display: "flex", gap: 6, alignItems: "center" }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.success }} />
+          Sincronizado · {d.ultima_sync}
         </div>
       </div>
 
-      {/* Estado de conexión */}
-      {!isConnected ? (
-        <div style={{ background: C.surface, border: `2px dashed ${C.border}`, borderRadius: 20, padding: 48, textAlign: "center" }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>{provider === "fitbit" ? "💙" : "❤️"}</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8 }}>
-            {provider === "fitbit" ? "Conectar Fitbit" : "Conectar Polar"}
-          </div>
-          <div style={{ fontSize: 13, color: C.muted, marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
-            {provider === "fitbit"
-              ? "Conecta via Fitbit Web API (OAuth2). El paciente autoriza desde su app Fitbit y los datos se sincronizan automáticamente."
-              : "Conecta via Polar Open API (OAuth2). Compatible con Polar H10, Vantage, Ignite y Grit X."}
-          </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 24 }}>
-            {provider === "fitbit"
-              ? ["HR continuo", "HRV", "SpO2", "Sueño por fases", "Estrés", "Temperatura", "Pasos"].map(m => <span key={m} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: "rgba(0,176,185,0.1)", color: "#00B0B9", border: "1px solid rgba(0,176,185,0.25)" }}>{m}</span>)
-              : ["HR preciso", "HRV clínico", "Carga entrenamiento", "Recuperación", "Sueño", "Zonas cardíacas"].map(m => <span key={m} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: "rgba(208,2,27,0.1)", color: "#D0021B", border: "1px solid rgba(208,2,27,0.25)" }}>{m}</span>)}
-          </div>
-          <button onClick={connect} disabled={connecting} style={{ padding: "14px 40px", borderRadius: 12, background: provider === "fitbit" ? "rgba(0,176,185,0.15)" : "rgba(208,2,27,0.15)", border: `1px solid ${provider === "fitbit" ? "rgba(0,176,185,0.4)" : "rgba(208,2,27,0.4)"}`, color: provider === "fitbit" ? "#00B0B9" : "#D0021B", fontSize: 15, fontWeight: 800, cursor: connecting ? "not-allowed" : "pointer" }}>
-            {connecting ? "🔄 Conectando..." : `🔗 Conectar con ${provider === "fitbit" ? "Fitbit" : "Polar"}`}
-          </button>
-          <div style={{ marginTop: 16, fontSize: 11, color: C.dim }}>
-            {provider === "fitbit" ? "Requiere cuenta Fitbit del paciente · OAuth2 · API gratuita" : "Requiere cuenta Polar Flow · OAuth2 · Open API gratuita"}
-          </div>
-        </div>
-      ) : (
-        <div>
-          {/* Status bar */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 18px", marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.success, animation: "pulse 2s infinite" }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{d.device}</span>
-              <span style={{ fontSize: 12, color: C.muted }}>· Sincronizado {d.lastSync}</span>
-            </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <span style={{ fontSize: 12, color: C.muted }}>🔋 {d.battery}%</span>
-              <button onClick={() => setData(prev => ({ ...prev, [provider]: { ...prev[provider], connected: false } }))} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: C.dangerDim, border: `1px solid ${C.danger}25`, color: C.danger, cursor: "pointer", fontWeight: 700 }}>Desconectar</button>
-            </div>
-          </div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+        {[{ id: "resumen", l: "📊 Resumen" }, { id: "cardiaco", l: "❤️ Cardíaco" }, { id: "sueno", l: "😴 Sueño" }, { id: "actividad", l: "🏃 Actividad" }, { id: "tendencia", l: "📈 Tendencias" }].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.success : C.muted, borderBottom: tab === t.id ? `2px solid ${C.success}` : "2px solid transparent" }}>{t.l}</button>
+        ))}
+      </div>
 
-          {/* Alertas automáticas */}
-          {alertas.length > 0 && alertas.map((a, i) => (
-            <div key={i} style={{ background: a.tipo === "danger" ? C.dangerDim : C.warningDim, border: `1px solid ${a.tipo === "danger" ? C.danger : C.warning}25`, borderRadius: 10, padding: "10px 16px", marginBottom: 10, fontSize: 12, color: a.tipo === "danger" ? C.danger : C.warning, display: "flex", gap: 8, alignItems: "center" }}>
-              {a.tipo === "danger" ? "🚨" : "⚠️"} {a.msg}
-            </div>
+      {tab === "resumen" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 14 }}>
+          {[
+            { l: "Pasos hoy", v: d.hoy.pasos.toLocaleString(), icon: "👟", c: C.primary, sub: "Meta: 10,000" },
+            { l: "FC reposo", v: `${d.hoy.fc_reposo} bpm`, icon: "❤️", c: C.danger, sub: "Excelente" },
+            { l: "Body Battery", v: `${d.hoy.body_battery}%`, icon: "🔋", c: C.success, sub: "Energía disponible" },
+            { l: "Estrés", v: d.hoy.estres, icon: "🧘", c: d.hoy.estres < 40 ? C.success : C.warning, sub: d.hoy.estres < 40 ? "Bajo" : "Moderado" },
+            { l: "Sueño", v: `${d.hoy.sueno_horas}h`, icon: "😴", c: C.purple, sub: `Score ${d.hoy.sueno_score}` },
+            { l: "SpO2", v: `${d.hoy.spo2}%`, icon: "🫁", c: C.teal, sub: "Normal" },
+            { l: "VO2 Max", v: d.hoy.vo2max, icon: "💨", c: C.orange, sub: "Superior" },
+            { l: "Calorías", v: d.hoy.calorias.toLocaleString(), icon: "🔥", c: C.warning, sub: "Activas + basal" },
+          ].map(k => (
+            <Card key={k.l} color={k.c}>
+              <div style={{ fontSize: 22, marginBottom: 8 }}>{k.icon}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: k.c }}>{k.v}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginTop: 2 }}>{k.l}</div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{k.sub}</div>
+            </Card>
           ))}
-
-          {/* Tabs */}
-          <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
-            {[{ id: "resumen", l: "📊 Resumen" }, { id: "cardiaco", l: "❤️ Cardíaco" }, { id: "sueno", l: "😴 Sueño" }, { id: "actividad", l: "🏃 Actividad" }, { id: "tendencia", l: "📈 Tendencia" }].map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.success : C.muted, borderBottom: tab === t.id ? `2px solid ${C.success}` : "2px solid transparent" }}>{t.l}</button>
-            ))}
-          </div>
-
-          {/* RESUMEN */}
-          {tab === "resumen" && (
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
-                {provider === "fitbit" ? [
-                  { l: "FC Reposo", v: `${d.today.hr_reposo} bpm`, c: hrColor(d.today.hr_reposo), icon: "❤️", sub: "Normal <60" },
-                  { l: "HRV", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv), icon: "〰️", sub: ">40 = bueno" },
-                  { l: "SpO2", v: `${d.today.spo2}%`, c: d.today.spo2 >= 95 ? C.success : C.danger, icon: "🫁", sub: "Normal >95%" },
-                  { l: "Estrés", v: `${d.today.estres}/100`, c: stressColor(d.today.estres), icon: "🧠", sub: "<30 = bajo" },
-                  { l: "Recuperación", v: `${d.today.recuperacion}%`, c: d.today.recuperacion >= 70 ? C.success : C.warning, icon: "⚡", sub: ">70% = listo" },
-                  { l: "Temperatura", v: `${d.today.temperatura}°C`, c: C.teal, icon: "🌡️", sub: "Basal normal" },
-                  { l: "Pasos hoy", v: d.today.pasos.toLocaleString(), c: C.primary, icon: "👣", sub: "Meta: 8000" },
-                  { l: "Calorías", v: d.today.calorias.toLocaleString(), c: C.orange, icon: "🔥", sub: "Activas" },
-                ].map(k => (
-                  <div key={k.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", textAlign: "center" }}>
-                    <div style={{ fontSize: 24, marginBottom: 6 }}>{k.icon}</div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: k.c }}>{k.v}</div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginTop: 2 }}>{k.l}</div>
-                    <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{k.sub}</div>
-                  </div>
-                )) : [
-                  { l: "FC Reposo", v: `${d.today.hr_reposo} bpm`, c: hrColor(d.today.hr_reposo), icon: "❤️" },
-                  { l: "HRV", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv), icon: "〰️" },
-                  { l: "Carga", v: `${d.today.carga}`, c: d.today.carga > 400 ? C.danger : C.warning, icon: "⚡" },
-                  { l: "Recuperación", v: `${d.today.recuperacion}%`, c: d.today.recuperacion >= 70 ? C.success : C.warning, icon: "🔋" },
-                ].map(k => (
-                  <div key={k.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", textAlign: "center" }}>
-                    <div style={{ fontSize: 24, marginBottom: 6 }}>{k.icon}</div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: k.c }}>{k.v}</div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginTop: 2 }}>{k.l}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Interpretación clínica automática */}
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>🧠 INTERPRETACIÓN CLÍNICA</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  {provider === "fitbit" && [
-                    { titulo: "Estado cardiovascular", desc: d.today.hr_reposo < 60 ? "FC en reposo óptima — buena condición cardiovascular" : "FC en reposo normal para actividad moderada", color: C.success },
-                    { titulo: "Recuperación", desc: d.today.recuperacion >= 70 ? "Listo para sesión de tratamiento — buena recuperación" : "Recuperación moderada — considerar intensidad del protocolo", color: d.today.recuperacion >= 70 ? C.success : C.warning },
-                    { titulo: "Sueño y dolor", desc: `${d.sueno?.score >= 80 ? "Sueño reparador" : "Sueño subóptimo"} — ${d.sueno?.score >= 80 ? "favorece reducción del dolor crónico" : "puede impactar umbral del dolor"}`, color: d.sueno?.score >= 80 ? C.success : C.warning },
-                    { titulo: "Nivel de estrés", desc: d.today.estres <= 30 ? "Estrés bajo — sistema nervioso en equilibrio" : "Estrés moderado — considerar técnicas de relajación", color: d.today.estres <= 30 ? C.success : C.warning },
-                  ].map(i => (
-                    <div key={i.titulo} style={{ background: `${i.color}08`, border: `1px solid ${i.color}20`, borderRadius: 10, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: i.color, marginBottom: 5 }}>{i.titulo}</div>
-                      <div style={{ fontSize: 12, color: C.text }}>{i.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* CARDÍACO */}
-          {tab === "cardiaco" && (
-            <div>
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, marginBottom: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>FC ÚLTIMAS 24 HORAS</div>
-                {provider === "fitbit" && d.hrTendencia && (
-                  <div>
-                    <svg width="100%" height="100" style={{ overflow: "visible" }}>
-                      {[40, 60, 80, 100, 120].map(v => { const y = 100 - ((v - 40) / 80) * 90; return <g key={v}><line x1="0" y1={y} x2="100%" y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" /><text x="-2" y={y + 4} textAnchor="end" fill={C.muted} fontSize="9">{v}</text></g>; })}
-                      <polyline points={d.hrTendencia.map((v, i) => `${(i / (d.hrTendencia.length - 1)) * 100}%,${100 - ((v - 40) / 80) * 90}`).join(" ")} fill="none" stroke={C.danger} strokeWidth="2" strokeLinejoin="round" />
-                      {d.hrTendencia.map((v, i) => <circle key={i} cx={`${(i / (d.hrTendencia.length - 1)) * 100}%`} cy={100 - ((v - 40) / 80) * 90} r="3" fill={hrColor(v)} />)}
-                    </svg>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: C.dim, marginTop: 6 }}>
-                      {["00h", "03h", "06h", "09h", "12h", "15h", "18h", "21h", "24h"].map(h => <span key={h}>{h}</span>)}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
-                {[
-                  { l: "FC mínima", v: `${d.today.hr_reposo} bpm`, c: C.success },
-                  { l: "FC máxima hoy", v: `${d.today.hr_max} bpm`, c: d.today.hr_max > 160 ? C.danger : C.warning },
-                  { l: "FC actual", v: `${d.today.hr_actual} bpm`, c: hrColor(d.today.hr_actual) },
-                  { l: "HRV (RMSSD)", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv) },
-                  { l: "SpO2", v: `${d.today.spo2}%`, c: d.today.spo2 >= 95 ? C.success : C.danger },
-                  { l: "Temperatura", v: `${d.today.temperatura}°C`, c: C.teal },
-                ].map(m => (
-                  <div key={m.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, textAlign: "center" }}>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: m.c }}>{m.v}</div>
-                    <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{m.l}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* SUEÑO */}
-          {tab === "sueno" && d.sueno && (
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 16 }}>ANOCHE</div>
-                  <div style={{ textAlign: "center", marginBottom: 20 }}>
-                    <div style={{ fontSize: 48, fontWeight: 900, color: d.sueno.score >= 80 ? C.success : d.sueno.score >= 60 ? C.warning : C.danger }}>{d.sueno.score}</div>
-                    <div style={{ fontSize: 13, color: C.muted }}>Score de sueño · {d.sueno.duracion}</div>
-                  </div>
-                  {[{ l: "Sueño profundo", v: d.sueno.profundo, c: C.primary }, { l: "REM", v: d.sueno.rem, c: C.purple }, { l: "Sueño ligero", v: d.sueno.ligero, c: C.teal }, { l: "Despertares", v: `${d.sueno.despertares}x`, c: d.sueno.despertares <= 2 ? C.success : C.warning }].map(s => (
-                    <div key={s.l} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
-                      <span style={{ fontSize: 12, color: C.muted }}>{s.l}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: s.c }}>{s.v}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 14 }}>IMPACTO CLÍNICO</div>
-                  {[
-                    { l: "Umbral del dolor", v: d.sueno.score >= 80 ? "↑ Elevado — buena tolerancia" : "↓ Reducido — mayor sensibilidad", c: d.sueno.score >= 80 ? C.success : C.warning },
-                    { l: "Recuperación muscular", v: d.sueno.profundo >= "1h 30m" ? "✓ Sueño profundo suficiente" : "⚠️ Sueño profundo insuficiente", c: C.success },
-                    { l: "Cortisol estimado", v: d.sueno.score >= 80 ? "Normal" : "Posiblemente elevado", c: d.sueno.score >= 80 ? C.success : C.warning },
-                    { l: "Recomendación", v: d.sueno.score >= 80 ? "Sesión de intensidad normal" : "Reducir intensidad del protocolo hoy", c: d.sueno.score >= 80 ? C.teal : C.warning },
-                  ].map(i => (
-                    <div key={i.l} style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>{i.l}</div>
-                      <div style={{ fontSize: 12, color: i.c, marginTop: 2 }}>{i.v}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ACTIVIDAD */}
-          {tab === "actividad" && (
-            <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 20 }}>
-                {provider === "fitbit" ? [
-                  { l: "Pasos hoy", v: d.today.pasos.toLocaleString(), meta: 8000, c: C.primary },
-                  { l: "Calorías activas", v: d.today.calorias.toLocaleString(), meta: 2000, c: C.orange },
-                  { l: "Recuperación", v: `${d.today.recuperacion}%`, meta: 100, c: C.success },
-                ].map(m => (
-                  <div key={m.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: m.c, marginBottom: 4 }}>{m.v}</div>
-                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>{m.l}</div>
-                    <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 99, height: 5 }}>
-                      <div style={{ width: `${Math.min((parseInt(m.v.replace(/,/g, "")) / m.meta) * 100, 100)}%`, height: "100%", background: m.c, borderRadius: 99 }} />
-                    </div>
-                  </div>
-                )) : [
-                  { l: "Carga de entrenamiento", v: d.today.carga, c: C.warning },
-                  { l: "Recuperación", v: `${d.today.recuperacion}%`, c: C.success },
-                  { l: "HRV", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv) },
-                ].map(m => (
-                  <div key={m.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, textAlign: "center" }}>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: m.c }}>{m.v}</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{m.l}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TENDENCIA SEMANAL */}
-          {tab === "tendencia" && d.semana && (
-            <div>
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>TENDENCIA SEMANAL</div>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                    <thead>
-                      <tr>
-                        {["Día", "FC Reposo", "HRV", provider === "fitbit" ? "Pasos" : "Carga", provider === "fitbit" ? "Estrés" : "Recuperación"].map(h => (
-                          <th key={h} style={{ padding: "8px 12px", textAlign: "center", fontSize: 10, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {d.semana.map((row, i) => (
-                        <tr key={i} style={{ background: i % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent" }}>
-                          <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 700, color: C.text }}>{row.dia}</td>
-                          <td style={{ padding: "10px 12px", textAlign: "center", color: row.hr > 0 ? hrColor(row.hr) : C.dim, fontWeight: 700 }}>{row.hr > 0 ? `${row.hr} bpm` : "—"}</td>
-                          <td style={{ padding: "10px 12px", textAlign: "center", color: row.hrv > 0 ? hrvColor(row.hrv) : C.dim, fontWeight: 700 }}>{row.hrv > 0 ? `${row.hrv} ms` : "—"}</td>
-                          <td style={{ padding: "10px 12px", textAlign: "center", color: C.primary }}>{provider === "fitbit" ? (row.pasos > 0 ? row.pasos.toLocaleString() : "—") : (row.carga > 0 ? row.carga : "—")}</td>
-                          <td style={{ padding: "10px 12px", textAlign: "center", color: provider === "fitbit" ? stressColor(row.estres) : (row.recuperacion >= 70 ? C.success : C.warning), fontWeight: 700 }}>{provider === "fitbit" ? (row.estres > 0 ? `${row.estres}` : "—") : (row.recuperacion > 0 ? `${row.recuperacion}%` : "—")}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
+
+      {tab === "cardiaco" && (
+        <div>
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>FRECUENCIA CARDÍACA EN REPOSO (7 días)</div>
+            {miniChart(d.semana_fc, C.danger, 70, "")}
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+            {[{ l: "FC Reposo", v: `${d.hoy.fc_reposo} bpm`, c: C.success }, { l: "FC Máxima hoy", v: `${d.hoy.fc_max} bpm`, c: C.danger }, { l: "Variabilidad (HRV)", v: "62 ms", c: C.primary }].map(m => (
+              <Card key={m.l} style={{ textAlign: "center" }}><div style={{ fontSize: 24, fontWeight: 800, color: m.c }}>{m.v}</div><div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{m.l}</div></Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "sueno" && (
+        <div>
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>HORAS DE SUEÑO (7 días)</div>
+            {miniChart(d.semana_sueno, C.purple, 10, "h")}
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
+            {[{ l: "Profundo", v: "1.8h", c: C.primary }, { l: "Ligero", v: "4.1h", c: C.teal }, { l: "REM", v: "1.3h", c: C.purple }, { l: "Score", v: d.hoy.sueno_score, c: C.success }].map(m => (
+              <Card key={m.l} style={{ textAlign: "center" }}><div style={{ fontSize: 22, fontWeight: 800, color: m.c }}>{m.v}</div><div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{m.l}</div></Card>
+            ))}
+          </div>
+          <Card style={{ marginTop: 16, background: "rgba(167,139,250,0.04)" }}>
+            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.7 }}>💡 <strong style={{ color: C.text }}>Correlación clínica:</strong> El sueño promedio de {(d.semana_sueno.reduce((a, b) => a + b, 0) / 7).toFixed(1)}h con score {d.hoy.sueno_score} es adecuado para la recuperación. Un buen sueño favorece la reducción del dolor y la respuesta antiinflamatoria al tratamiento.</div>
+          </Card>
+        </div>
+      )}
+
+      {tab === "actividad" && (
+        <div>
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>PASOS DIARIOS (7 días)</div>
+            {miniChart(d.semana_pasos, C.primary, 12000, "")}
+          </Card>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+            {[{ l: "Promedio diario", v: Math.round(d.semana_pasos.reduce((a, b) => a + b, 0) / 7).toLocaleString(), c: C.primary }, { l: "Mejor día", v: Math.max(...d.semana_pasos).toLocaleString(), c: C.success }, { l: "VO2 Max", v: d.hoy.vo2max, c: C.orange }].map(m => (
+              <Card key={m.l} style={{ textAlign: "center" }}><div style={{ fontSize: 24, fontWeight: 800, color: m.c }}>{m.v}</div><div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{m.l}</div></Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "tendencia" && (
+        <div>
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>NIVEL DE ESTRÉS (7 días)</div>
+            {miniChart(d.semana_estres, C.warning, 60, "")}
+          </Card>
+          <Card style={{ background: "rgba(16,185,129,0.04)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.success, letterSpacing: 2, marginBottom: 10 }}>📊 RESUMEN PARA EL MÉDICO</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.8 }}>
+              El paciente mantiene una FC en reposo baja ({d.hoy.fc_reposo} bpm), indicativo de buena condición cardiovascular. El estrés promedio es {Math.round(d.semana_estres.reduce((a, b) => a + b, 0) / 7)} (bajo-moderado) y el sueño es adecuado. Estos marcadores favorecen la recuperación y la respuesta al tratamiento.
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// 7. PLUGIN REGISTRY — REGISTRO CENTRAL
-//    Para agregar un módulo: añade un objeto aquí.
-//    Para desactivar: comenta o elimina su entrada.
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// REGISTRO DE PLUGINS — agrega/quita módulos aquí
+// ═══════════════════════════════════════════════════════════════
 const pluginRegistry = [
-  {
-    id: "dashboard",
-    name: "Dashboard",
-    icon: "⊞",
-    color: DS.colors.primary,
-    group: "clinical",
-    version: "1.0.0",
-    description: "Vista general del sistema",
-    component: DashboardPlugin,
-  },
-  {
-    id: "patients",
-    name: "Pacientes",
-    icon: "👥",
-    color: DS.colors.primary,
-    group: "clinical",
-    version: "1.0.0",
-    description: "Gestión de pacientes",
-    component: PatientsPlugin,
-  },
-  {
-    id: "flir",
-    name: "Cámara FLIR",
-    icon: "🌡️",
-    color: DS.colors.thermo,
-    group: "devices",
-    version: "1.0.0",
-    description: "Termografía en vivo",
-    badge: "SDK",
-    patientAction: true,
-    patientActionLabel: "FLIR",
-    onPatientAction: (patient, navigate) => navigate("flir", patient),
-    component: FLIRPlugin,
-  },
-  {
-    id: "copilot",
-    name: "Copiloto IA",
-    icon: "🧠",
-    color: DS.colors.success,
-    group: "ai",
-    version: "1.0.0",
-    description: "Asistente clínico GPT-4o",
-    badge: "IA",
-    patientAction: true,
-    patientActionLabel: "IA",
-    onPatientAction: (patient, navigate) => navigate("copilot", patient),
-    component: CopilotPlugin,
-  },
-  {
-    id: "devices",
-    name: "Dispositivos",
-    icon: "🔌",
-    color: DS.colors.purple,
-    group: "devices",
-    version: "1.0.0",
-    description: "Hub de integraciones",
-    component: DevicesPlugin,
-  },
-  // ── MÓDULOS EN DESARROLLO ─────────────────────────────────
-  // Para activar: reemplaza component con el componente real
-  {
-    id: "inbody",
-    name: "InBody",
-    icon: "⚖️",
-    color: DS.colors.primary,
-    group: "devices",
-    version: "0.1.0",
-    description: "Composición corporal segmental",
-    badge: "Próximo",
-    patientAction: true,
-    patientActionLabel: "InBody",
-    onPatientAction: (patient, navigate) => navigate("inbody", patient),
-    component: () => <PlaceholderPlugin name="InBody Integration" icon="⚖️" description="Importa datos de composición corporal segmental desde LookinBody WebAPI o archivos CSV del software LB120." coming />,
-  },
-  {
-    id: "vald",
-    name: "VALD Performance",
-    icon: "💪",
-    color: DS.colors.warning,
-    group: "devices",
-    version: "0.1.0",
-    description: "Fuerza y rendimiento muscular",
-    badge: "Próximo",
-    patientAction: true,
-    patientActionLabel: "VALD",
-    onPatientAction: (patient, navigate) => navigate("vald", patient),
-    component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración con ForceDecks, NordBord y VALD Hub via REST API OAuth2." coming />,
-  },
-  {
-    id: "bodygee",
-    name: "Bodygee 3D",
-    icon: "🔵",
-    color: DS.colors.purple,
-    group: "devices",
-    version: "0.1.0",
-    description: "Escaneo corporal 3D",
-    badge: "Próximo",
-    component: () => <PlaceholderPlugin name="Bodygee 3D Scanner" icon="🔵" description="Sincronización de avatares 3D y métricas corporales via Bodygee API + webhooks automáticos." coming />,
-  },
-  {
-    id: "garmin",
-    name: "Wearables",
-    icon: "⌚",
-    color: DS.colors.success,
-    group: "devices",
-    version: "1.0.0",
-    description: "Fitbit + Polar — datos en tiempo real",
-    component: WearablesPlugin,
-  },
-  {
-    id: "motor",
-    name: "Motor Diagnóstico",
-    icon: "🧠",
-    color: DS.colors.success,
-    group: "clinical",
-    version: "1.0.0",
-    description: "9 módulos → 4 capas → Protocolo",
-    badge: "Core",
-    patientAction: true,
-    patientActionLabel: "Diagnóstico",
-    onPatientAction: (patient, navigate) => navigate("motor", patient),
-    component: MotorCentralPlugin,
-  },
-  {
-    id: "analytics",
-    name: "Analytics",
-    icon: "📊",
-    color: DS.colors.purple,
-    group: "business",
-    version: "1.0.0",
-    description: "Métricas y reportes clínicos",
-    component: AnalyticsPlugin,
-  },
-  {
-    id: "telemedicine",
-    name: "Telemedicina",
-    icon: "📱",
-    color: DS.colors.teal,
-    group: "clinical",
-    version: "1.0.0",
-    description: "Videollamada con pacientes",
-    patientAction: true,
-    patientActionLabel: "Teleconsulta",
-    onPatientAction: (patient, navigate) => navigate("telemedicine", patient),
-    component: TelemedicinePlugin,
-  },
-  {
-    id: "payments",
-    name: "Pagos",
-    icon: "💳",
-    color: DS.colors.success,
-    group: "business",
-    version: "1.0.0",
-    description: "Planes y membresías Stripe",
-    component: PaymentsPlugin,
-  },
-  {
-    id: "prescriptions",
-    name: "Prescripciones",
-    icon: "💊",
-    color: DS.colors.teal,
-    group: "clinical",
-    version: "1.0.0",
-    description: "Protocolos digitales para pacientes",
-    patientAction: true,
-    patientActionLabel: "Prescribir",
-    onPatientAction: (patient, navigate) => navigate("prescriptions", patient),
-    component: PrescriptionsPlugin,
-  },
-  {
-    id: "knowledge",
-    name: "Base de Conocimiento",
-    icon: "📚",
-    color: DS.colors.warning,
-    group: "ai",
-    version: "1.0.0",
-    description: "Biblioteca clínica — Solo Admin",
-    badge: "Admin",
-    component: KnowledgeBasePlugin,
-  },
-  {
-    id: "education",
-    name: "Educación",
-    icon: "📚",
-    color: DS.colors.orange,
-    group: "education",
-    version: "1.0.0",
-    description: "Biblioteca clínica AW4W",
-    component: () => <PlaceholderPlugin name="Módulos Educativos" icon="📚" description="EKG · Netter's Sports Medicine · Body Structures · Acupuntura · Biorresonancia · OT Toolkit · Killer Practical · USMLE Rehab" coming />,
-  },
+  { id: "dashboard", name: "Dashboard", icon: "📊", color: DS.colors.primary, group: "clinical", description: "Vista general clínica", component: DashboardPlugin },
+  { id: "patients", name: "Pacientes", icon: "👥", color: DS.colors.teal, group: "clinical", description: "Gestión de pacientes", component: PatientsPlugin },
+  { id: "flir", name: "Termografía FLIR", icon: "🌡️", color: DS.colors.thermo, group: "devices", badge: "SDK", description: "Cámara térmica y galería", component: FLIRPlugin, patientAction: true, patientActionLabel: "Termografía", onPatientAction: (p, nav) => nav("flir", p) },
+  { id: "copilot", name: "Copiloto IA", icon: "🧠", color: DS.colors.success, group: "ai", badge: "IA", description: "Asistente clínico Alex", component: CopilotPlugin, patientAction: true, patientActionLabel: "Copiloto", onPatientAction: (p, nav) => nav("copilot", p) },
+  { id: "devices", name: "Dispositivos", icon: "🔌", color: DS.colors.primary, group: "devices", description: "Hub de integraciones", component: DevicesPlugin },
+  { id: "inbody", name: "InBody", icon: "⚖️", color: DS.colors.primary, group: "devices", description: "Composición corporal", component: () => <PlaceholderPlugin name="InBody" icon="⚖️" description="Integración de composición corporal (LookinBody WebAPI + CSV)." coming />, patientAction: true, patientActionLabel: "InBody", onPatientAction: (p, nav) => nav("inbody", p) },
+  { id: "vald", name: "VALD", icon: "💪", color: DS.colors.warning, group: "devices", description: "Fuerza y rendimiento", component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración de fuerza y rendimiento vía REST API (OAuth2)." coming />, patientAction: true, patientActionLabel: "VALD", onPatientAction: (p, nav) => nav("vald", p) },
+  { id: "bodygee", name: "Bodygee", icon: "🔵", color: DS.colors.purple, group: "devices", description: "Escaneo 3D corporal", component: () => <PlaceholderPlugin name="Bodygee" icon="🔵" description="Escaneo 3D corporal vía REST API + Webhooks." coming /> },
+  { id: "garmin", name: "Wearables", icon: "⌚", color: DS.colors.success, group: "devices", description: "Garmin / Polar / Fitbit", component: WearablesPlugin },
+  { id: "motor", name: "Motor Central", icon: "🧠", color: DS.colors.purple, group: "clinical", badge: "Core", description: "Diagnóstico 9→4 capas", component: MotorCentralPlugin, patientAction: true, patientActionLabel: "Motor Dx", onPatientAction: (p, nav) => nav("motor", p) },
+  { id: "analytics", name: "Analytics", icon: "📈", color: DS.colors.purple, group: "business", description: "Métricas y reportes", component: AnalyticsPlugin },
+  { id: "telemedicine", name: "Telemedicina", icon: "📱", color: DS.colors.teal, group: "clinical", description: "Video, chat y archivos", component: TelemedicinePlugin, patientAction: true, patientActionLabel: "Telemedicina", onPatientAction: (p, nav) => nav("telemedicine", p) },
+  { id: "payments", name: "Planes y Pagos", icon: "💳", color: DS.colors.success, group: "business", description: "Membresías y facturación", component: PaymentsPlugin },
+  { id: "prescriptions", name: "Prescripciones", icon: "💊", color: DS.colors.teal, group: "clinical", description: "Protocolos digitales", component: PrescriptionsPlugin, patientAction: true, patientActionLabel: "Prescribir", onPatientAction: (p, nav) => nav("prescriptions", p) },
+  { id: "knowledge", name: "Base de Conocimiento", icon: "📚", color: DS.colors.warning, group: "education", badge: "Admin", description: "Biblioteca clínica IA", component: KnowledgeBasePlugin },
+  { id: "education", name: "Educación", icon: "🎓", color: DS.colors.purple, group: "education", description: "Cursos y formación", component: () => <PlaceholderPlugin name="Educación" icon="🎓" description="Módulo de cursos y formación clínica." coming /> },
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// PORTAL DEL PACIENTE — Vista simplificada
+// PORTAL DEL PACIENTE (rol "paciente")
 // ═══════════════════════════════════════════════════════════════
-function PatientPortal({ user, patient, sessions, onLogout }) {
+function PatientPortal({ user, onSignOut }) {
   const C = DS.colors;
-  const [tab, setTab] = useState("resumen");
-  const patSess = sessions.filter(s => s.paciente_id === patient?.id);
-  const mej = patSess.filter(s => s.eva_pre && s.eva_post).length
-    ? Math.round(patSess.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / patSess.filter(s => s.eva_pre && s.eva_post).length)
+  const yo = DEMO_PATIENTS[0];
+  const misSesiones = DEMO_SESSIONS.filter(s => s.paciente_id === yo.id);
+  const mej = misSesiones.filter(s => s.eva_pre && s.eva_post).length
+    ? Math.round(misSesiones.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / misSesiones.filter(s => s.eva_pre && s.eva_post).length)
     : 0;
+  const [tele, setTele] = useState(false);
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>
-      {/* Header */}
-      <div style={{ background: "rgba(255,255,255,0.02)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 22, fontWeight: 900, background: "linear-gradient(135deg,#38BDF8,#818CF8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AWAKE4WELLNESS</div>
-          <div style={{ fontSize: 10, padding: "3px 10px", borderRadius: 20, background: "rgba(16,185,129,0.12)", color: C.success, fontWeight: 700 }}>🧑 Portal Paciente</div>
+    <AppCtx.Provider value={{ C, user }}>
+      <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>
+        <div style={{ borderBottom: `1px solid ${C.border}`, padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🌿</div>
+            <div><div style={{ fontSize: 15, fontWeight: 800 }}>Awake4Wellness</div><div style={{ fontSize: 11, color: C.muted }}>Portal del Paciente</div></div>
+          </div>
+          <button onClick={onSignOut} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Cerrar sesión</button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 13, color: C.muted }}>{user.nombre}</div>
-          <button onClick={onLogout} style={{ padding: "6px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: C.danger, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Salir</button>
-        </div>
-      </div>
 
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: 28 }}>
-        {/* Bienvenida */}
-        <div style={{ background: "linear-gradient(135deg,rgba(56,189,248,0.08),rgba(129,140,248,0.08))", border: `1px solid rgba(56,189,248,0.15)`, borderRadius: 20, padding: 24, marginBottom: 24, display: "flex", gap: 20, alignItems: "center" }}>
-          <Avatar name={user.nombre} size={64} />
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: C.text }}>Bienvenido, {user.nombre} 👋</div>
-            <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Aquí puedes ver tu progreso y comunicarte con tu médico.</div>
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <Badge color={C.primary}>{patSess.length} sesiones</Badge>
-              <Badge color={mej >= 50 ? C.success : C.warning}>Mejoría {mej}%</Badge>
-              {patient?.condicion_principal && <Badge color={C.purple}>{patient.condicion_principal}</Badge>}
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "28px 24px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
+            <Avatar name={`${yo.nombre} ${yo.apellido}`} size={56} color={C.teal} />
+            <div>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Hola, {yo.nombre} 👋</h2>
+              <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>{yo.condicion_principal}</p>
             </div>
           </div>
-        </div>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
-          {[{ id: "resumen", l: "📊 Mi Progreso" }, { id: "sesiones", l: "📅 Mis Sesiones" }, { id: "mensajes", l: "💬 Mensajes" }].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "9px 18px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.primary : C.muted, borderBottom: tab === t.id ? `2px solid ${C.primary}` : "2px solid transparent" }}>{t.l}</button>
-          ))}
-        </div>
-
-        {tab === "resumen" && (
-          <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
-              {[{ l: "Sesiones completadas", v: patSess.length, c: C.primary, icon: "📅" },
-                { l: "Mejoría del dolor", v: `${mej}%`, c: mej >= 50 ? C.success : C.warning, icon: "📈" },
-                { l: "EVA actual", v: patSess[0]?.eva_post || "—", c: C.teal, icon: "💊" }].map(k => (
-                <div key={k.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, textAlign: "center" }}>
-                  <div style={{ fontSize: 24, marginBottom: 8 }}>{k.icon}</div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: k.c }}>{k.v}</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{k.l}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>🎯 Próxima sesión</div>
-              <div style={{ fontSize: 13, color: C.muted }}>Consulta con tu médico para programar tu próxima sesión de tratamiento.</div>
-              <button style={{ marginTop: 14, padding: "10px 20px", borderRadius: 10, background: C.primaryDim, border: `1px solid ${C.primary}35`, color: C.primary, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>📱 Solicitar sesión</button>
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
+            <StatCard label="Sesiones" value={misSesiones.length} color={C.primary} icon="📅" sub="completadas" />
+            <StatCard label="Mejoría" value={`${mej}%`} color={C.success} icon="📈" sub="reducción dolor" />
+            <StatCard label="Próxima cita" value="2 días" color={C.teal} icon="⏰" sub="HILT 15:00" />
           </div>
-        )}
 
-        {tab === "sesiones" && (
-          <div>
-            {patSess.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "60px 20px", color: C.muted }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
-                <div>Aún no tienes sesiones registradas</div>
-              </div>
-            ) : patSess.map((s, i) => (
-              <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Sesión {s.numero_sesion} — {s.protocolo}</div>
-                  <div style={{ fontSize: 12, color: C.muted }}>{new Date(s.fecha).toLocaleDateString("es-ES")}</div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Badge color={C.danger}>EVA inicial: {s.eva_pre}</Badge>
-                  <Badge color={C.success}>EVA final: {s.eva_post}</Badge>
-                  {s.eva_pre && s.eva_post && <Badge color={C.primary}>Mejoría: {Math.round((s.eva_pre - s.eva_post) / s.eva_pre * 100)}%</Badge>}
-                </div>
-                {s.notas && <div style={{ marginTop: 10, fontSize: 12, color: C.muted, background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: "8px 12px" }}>{s.notas}</div>}
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>MI PROTOCOLO ACTUAL</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: dim(C.warning), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>⚡</div>
+              <div><div style={{ fontSize: 14, fontWeight: 800 }}>HILT — Tendinopatía rotuliana</div><div style={{ fontSize: 12, color: C.muted }}>Sesión 7 de 8 · 3x semana</div></div>
+            </div>
+            <ProgressBar value={(7 / 8) * 100} color={C.warning} />
+            <div style={{ marginTop: 12, fontSize: 12, color: C.muted, lineHeight: 1.7 }}>
+              Llega 10 min antes de cada sesión. Evita cremas en la zona a tratar. Aplica hielo 15 min en casa post-sesión.
+            </div>
+          </Card>
+
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>MI EVOLUCIÓN</div>
+            {misSesiones.map(s => (
+              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div><div style={{ fontSize: 13, fontWeight: 700 }}>Sesión {s.numero_sesion} · {s.protocolo}</div><div style={{ fontSize: 11, color: C.muted }}>{new Date(s.fecha).toLocaleDateString("es-ES")}</div></div>
+                <Badge color={s.eva_post < s.eva_pre ? C.success : C.warning}>EVA {s.eva_pre}→{s.eva_post}</Badge>
               </div>
             ))}
-          </div>
-        )}
+          </Card>
 
-        {tab === "mensajes" && (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 24, textAlign: "center" }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 8 }}>Mensajería con tu médico</div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>Próximamente podrás comunicarte directamente con tu médico tratante.</div>
-            <Badge color={C.warning}>Próximamente</Badge>
-          </div>
-        )}
+          <Btn color={C.teal} fullWidth onClick={() => setTele(true)} style={{ padding: "13px" }}>📱 Iniciar consulta de telemedicina</Btn>
+          {tele && <Modal open={tele} onClose={() => setTele(false)} title="Telemedicina"><div style={{ textAlign: "center", padding: 20 }}><div style={{ fontSize: 40, marginBottom: 12 }}>📹</div><div style={{ fontSize: 13, color: C.muted }}>Tu médico se conectará a la hora de tu cita. Recibirás un aviso cuando la sala esté lista.</div></div></Modal>}
+        </div>
       </div>
-    </div>
+    </AppCtx.Provider>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// 8. LOGIN SCREEN
-// ─────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────
-// SISTEMA DE ROLES — 3 niveles de acceso
-// Admin → Médico → Paciente
-// ─────────────────────────────────────────────────────────────
-
-// Credenciales demo por rol
+// ═══════════════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════════════
 const DEMO_CREDENTIALS = {
-  admin: { email: "admin@awake4wellness.com", pass: "Admin2024!", rol: "admin", nombre: "Dr. Javier Cuartas", titulo: "Administrador & Fundador" },
-  medico: { email: "doctor@awake4wellness.com", pass: "Medico2024!", rol: "medico", nombre: "Dr. Médico", titulo: "Médico Tratante" },
-  paciente: { email: "paciente@awake4wellness.com", pass: "Paciente2024!", rol: "paciente", nombre: "Carlos Mendoza", titulo: "Paciente" },
+  admin:    { email: "admin@awake4wellness.com",    pass: "Admin2024!",    label: "Administrador", icon: "👑", color: DS.colors.warning },
+  medico:   { email: "doctor@awake4wellness.com",   pass: "Medico2024!",   label: "Médico",        icon: "👨‍⚕️", color: DS.colors.primary },
+  paciente: { email: "paciente@awake4wellness.com", pass: "Paciente2024!", label: "Paciente",      icon: "🧑", color: DS.colors.teal },
 };
 
-function RoleSelector({ onSelect, selected }) {
+function RoleSelector({ value, onChange }) {
   const C = DS.colors;
-  const roles = [
-    { id: "admin", label: "Administrador", icon: "👑", desc: "Acceso total al sistema", color: C.warning },
-    { id: "medico", label: "Médico", icon: "👨‍⚕️", desc: "Gestión clínica completa", color: C.primary },
-    { id: "paciente", label: "Paciente", icon: "🧑", desc: "Mi historia y progreso", color: C.success },
-  ];
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>SELECCIONA TU PERFIL</div>
-      {roles.map(r => (
-        <div key={r.id} onClick={() => onSelect(r.id)}
-          style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
-            background: selected === r.id ? `${r.color}12` : "rgba(255,255,255,0.03)",
-            border: `1px solid ${selected === r.id ? `${r.color}40` : C.border}`,
-            transform: selected === r.id ? "translateX(4px)" : "none" }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: `${r.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{r.icon}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: selected === r.id ? r.color : C.text }}>{r.label}</div>
-            <div style={{ fontSize: 11, color: C.muted }}>{r.desc}</div>
-          </div>
-          {selected === r.id && <div style={{ width: 8, height: 8, borderRadius: "50%", background: r.color }} />}
-        </div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+      {Object.entries(DEMO_CREDENTIALS).map(([rol, cfg]) => (
+        <button key={rol} onClick={() => onChange(rol)} style={{
+          flex: 1, padding: "12px 8px", borderRadius: 12, cursor: "pointer",
+          border: `1px solid ${value === rol ? `${cfg.color}50` : C.border}`,
+          background: value === rol ? dim(cfg.color) : "rgba(255,255,255,0.03)",
+          color: value === rol ? cfg.color : C.muted, fontWeight: 700, fontSize: 12,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 6, transition: "all 0.15s",
+        }}>
+          <span style={{ fontSize: 22 }}>{cfg.icon}</span>{cfg.label}
+        </button>
       ))}
     </div>
   );
 }
 
 function LoginScreen({ onLogin }) {
+  const C = DS.colors;
   const [rol, setRol] = useState("medico");
-  const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
+  const [email, setEmail] = useState(DEMO_CREDENTIALS.medico.email);
+  const [pass, setPass] = useState(DEMO_CREDENTIALS.medico.pass);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const C = DS.colors;
 
-  const rolColors = { admin: C.warning, medico: C.primary, paciente: C.success };
-  const rolColor = rolColors[rol];
+  function pickRole(r) {
+    setRol(r);
+    setEmail(DEMO_CREDENTIALS[r].email);
+    setPass(DEMO_CREDENTIALS[r].pass);
+  }
 
-  async function go() {
-    setError(""); setLoading(true);
+  async function entrar() {
+    setLoading(true); setError("");
     try {
-      // Demo mode — verificar credenciales localmente
-      if (IS_DEMO) {
-        const cred = DEMO_CREDENTIALS[rol];
-        if (email === cred.email && pass === cred.pass) {
-          const user = { email, id: `demo-${rol}`, rol, nombre: cred.nombre, titulo: cred.titulo };
-          localStorage.setItem("a4w_user", JSON.stringify(user));
-          onLogin(user);
-        } else {
-          // Permitir acceso demo con cualquier credencial correcta de rol
-          if (email === "" && pass === "") {
-            const cred2 = DEMO_CREDENTIALS[rol];
-            const user = { email: cred2.email, id: `demo-${rol}`, rol, nombre: cred2.nombre, titulo: cred2.titulo };
-            localStorage.setItem("a4w_user", JSON.stringify(user));
-            onLogin(user);
-          } else {
-            setError("Credenciales incorrectas. En modo demo presiona Entrar sin llenar los campos.");
-          }
-        }
-      } else {
-        // Producción — auth con Supabase
-        const d = await CoreServices.signIn(email, pass);
-        if (d.user) {
-          const user = { ...d.user, rol, nombre: d.user.email };
-          onLogin(user);
-        } else {
-          setError(d.error?.message || "Credenciales incorrectas");
-        }
-      }
-    } catch { setError("Error de conexión"); }
-    finally { setLoading(false); }
+      await CoreServices.signIn(email, pass);
+      const user = { email, id: "demo", rol };
+      localStorage.setItem("a4w_user", JSON.stringify(user));
+      onLogin(user);
+    } catch (e) {
+      setError(e.message || "No se pudo iniciar sesión");
+    } finally { setLoading(false); }
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DS.font }}>
-      {/* Fondo animado */}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
-        {[[300, 200, "#38BDF8"], [500, 500, "#818CF8"], [100, 400, "#10B981"]].map(([x, y, c], i) => (
-          <div key={i} style={{ position: "absolute", left: `${x / 12}%`, top: `${y / 8}%`, width: 400, height: 400, borderRadius: "50%", background: `${c}06`, filter: "blur(80px)" }} />
-        ))}
-      </div>
-
-      <div style={{ width: "100%", maxWidth: 460, padding: 20, position: "relative" }}>
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{ fontSize: 9, letterSpacing: 5, color: C.dim, marginBottom: 8 }}>PLATAFORMA CLÍNICA MODULAR</div>
-          <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: -2, background: "linear-gradient(135deg,#38BDF8 0%,#818CF8 50%,#F472B6 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            AWAKE4WELLNESS
-          </div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
-            Sistema Modular v4.0 · Concierge Recovery
-          </div>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ width: "100%", maxWidth: 420 }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 12 }}>🌿</div>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900 }}>Awake4Wellness</h1>
+          <p style={{ margin: "6px 0 0", color: C.muted, fontSize: 13 }}>Concierge Recovery & Neuro-Metabolic Optimization</p>
         </div>
 
-        <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 20, padding: 28 }}>
-          {/* Demo banner */}
-          {IS_DEMO && (
-            <div style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: C.success }}>
-              🎯 Selecciona tu perfil e ingresa tus credenciales
-            </div>
-          )}
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.5, marginBottom: 10 }}>SELECCIONA TU ROL</div>
+          <RoleSelector value={rol} onChange={pickRole} />
 
-          {/* Selector de rol */}
-          <RoleSelector selected={rol} onSelect={r => { setRol(r); setEmail(""); setPass(""); setError(""); }} />
-
-          {/* Formulario */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6 }}>Email</label>
-              <input value={email} onChange={e => setEmail(e.target.value)}
-                placeholder={IS_DEMO ? DEMO_CREDENTIALS[rol].email : "tu@email.com"}
-                type="email" onKeyDown={e => e.key === "Enter" && go()}
-                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, padding: "11px 14px", fontFamily: "inherit", boxSizing: "border-box", outline: "none" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6 }}>Contraseña</label>
-              <div style={{ position: "relative" }}>
-                <input value={pass} onChange={e => setPass(e.target.value)}
-                  placeholder={IS_DEMO ? DEMO_CREDENTIALS[rol].pass : "••••••••"}
-                  type={showPass ? "text" : "password"} onKeyDown={e => e.key === "Enter" && go()}
-                  style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, padding: "11px 42px 11px 14px", fontFamily: "inherit", boxSizing: "border-box", outline: "none" }} />
-                <button onClick={() => setShowPass(!showPass)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 14 }}>
-                  {showPass ? "🙈" : "👁️"}
-                </button>
-              </div>
-            </div>
-
-            {error && <div style={{ fontSize: 12, color: C.danger, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", padding: "9px 12px", borderRadius: 9 }}>{error}</div>}
-
-            <button onClick={go} disabled={loading}
-              style={{ width: "100%", padding: "13px", borderRadius: 11, border: `1px solid ${rolColor}35`, background: `${rolColor}15`, color: rolColor, fontSize: 14, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, fontFamily: "inherit", marginTop: 4 }}>
-              {loading ? "Verificando..." : `→ Entrar como ${rol === "admin" ? "Administrador" : rol === "medico" ? "Médico" : "Paciente"}`}
-            </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Input label="Correo" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" />
+            <Input label="Contraseña" type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" />
           </div>
 
-          {/* Demo hint — solo visible en desarrollo */}
+          {error && <div style={{ marginTop: 12, fontSize: 12, color: C.danger }}>{error}</div>}
+
           {IS_DEMO && false && (
-            <div style={{ marginTop: 20 }} />
+            <div style={{ marginTop: 12, fontSize: 11, color: C.dim }}>
+              Conecta Supabase para autenticación real.
+            </div>
           )}
+
+          <Btn color={C.teal} fullWidth onClick={entrar} disabled={loading} style={{ marginTop: 18, padding: "13px" }}>
+            {loading ? "Entrando..." : "Entrar →"}
+          </Btn>
+
+          <div style={{ marginTop: 14, fontSize: 11, color: C.muted, textAlign: "center" }}>
+            Modo demo · credenciales precargadas por rol
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// 9. APP SHELL — NUNCA SE MODIFICA
-//    Todo el sidebar y navegación se genera automáticamente
-//    desde el pluginRegistry
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// APP SHELL — sidebar auto-generado desde pluginRegistry
+// ═══════════════════════════════════════════════════════════════
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [screen, setScreen] = useState("dashboard");
-  const [contextData, setContextData] = useState(null);
+  const C = DS.colors;
+  const [user, setUser] = useState(() => CoreServices.getUser());
+  const [active, setActive] = useState({ id: "dashboard", patient: null });
   const [patients, setPatients] = useState(DEMO_PATIENTS);
   const [sessions, setSessions] = useState(DEMO_SESSIONS);
 
-  useEffect(() => { const u = CoreServices.getUser(); if (u) { setUser(u); setInitialScreen(u); } }, []);
-
-  function setInitialScreen(u) {
-    if (u.rol === "paciente") setScreen("mi-historia");
-    else setScreen("dashboard");
+  function navigate(id, patient = null) {
+    setActive({ id, patient: patient || (id === "patient-detail" ? active.patient : null) });
   }
 
-  async function handleLogin(u) { setUser(u); setInitialScreen(u); }
-  function logout() { CoreServices.signOut(); setUser(null); setScreen("dashboard"); }
-
   async function addPatient(form) {
-    const { data } = await CoreServices.insert("pacientes", { ...form, medico_id: user?.id });
-    const newPat = data?.[0] || { ...form, id: Date.now().toString(), activo: true };
-    setPatients(p => [...p, newPat]);
+    const { data } = await CoreServices.insert("patients", form);
+    const nuevo = (data && data[0]) || { ...form, id: Date.now().toString() };
+    setPatients(prev => [nuevo, ...prev]);
   }
 
   async function addSession(form) {
-    const { data } = await CoreServices.insert("sesiones", { ...form, medico_id: user?.id });
-    const newSess = data?.[0] || { ...form, id: Date.now().toString(), fecha: new Date().toISOString() };
-    setSessions(p => [...p, newSess]);
+    const { data } = await CoreServices.insert("sessions", form);
+    const nueva = (data && data[0]) || { ...form, id: Date.now().toString(), fecha: new Date().toISOString() };
+    setSessions(prev => [nueva, ...prev]);
   }
 
-  const C = DS.colors;
-  const appCtx = { C, navigate, patients, sessions };
+  function signOut() { CoreServices.signOut(); setUser(null); }
 
-  if (!user) return <LoginScreen onLogin={handleLogin} />;
+  if (!user) return <LoginScreen onLogin={setUser} />;
+  if (user.rol === "paciente") return <PatientPortal user={user} onSignOut={signOut} />;
 
-  // Filtrar plugins según rol
   const rol = user.rol || "medico";
-  const pluginsParaRol = pluginRegistry.filter(p => {
-    if (rol === "admin") return true;
-    if (rol === "medico") return !["knowledge"].includes(p.id);
-    if (rol === "paciente") return ["mi-historia", "telemedicine"].includes(p.id);
-    return true;
-  });
+  const visiblePlugins = pluginRegistry.filter(p => rol === "admin" ? true : p.badge !== "Admin");
 
-  // Si es paciente, mostrar vista simplificada
-  if (rol === "paciente") return <PatientPortal user={user} patient={patients.find(p => p.email === user.email) || patients[0]} sessions={sessions} onLogout={logout} />;
-
-  // Group plugins for sidebar
-  const grouped = Object.entries(PLUGIN_GROUPS).map(([groupId, group]) => ({
-    ...group, id: groupId,
-    plugins: pluginsParaRol.filter(p => p.group === groupId),
-  })).filter(g => g.plugins.length > 0);
-
-  function navigate(screenId, data = null) {
-    setScreen(screenId);
-    if (data) setContextData(data);
+  let ActiveComp = null, activePlugin = null;
+  if (active.id === "patient-detail" && active.patient) {
+    ActiveComp = PatientDetailPlugin;
+  } else {
+    activePlugin = visiblePlugins.find(p => p.id === active.id) || visiblePlugins[0];
+    ActiveComp = activePlugin.component;
   }
 
-  function renderPlugin() {
-    if (screen === "patient-detail" && contextData) {
-      return <PatientDetailPlugin patient={contextData} sessions={sessions} onAddSession={addSession} navigate={navigate} plugins={pluginsParaRol} />;
-    }
-    const plugin = pluginsParaRol.find(p => p.id === screen);
-    if (!plugin) return null;
-    const PluginComponent = plugin.component;
-    return <PluginComponent
-      patient={contextData}
-      patients={patients}
-      sessions={sessions}
-      onAddPatient={addPatient}
-      navigate={navigate}
-      plugins={pluginsParaRol}
-      user={user}
-    />;
-  }
-
-  const rolColor = { admin: C.warning, medico: C.primary }[rol] || C.primary;
-  const rolIcon = { admin: "👑", medico: "👨‍⚕️" }[rol] || "👤";
-
-  const currentPlugin = pluginRegistry.find(p => p.id === screen);
+  const groups = Object.keys(PLUGIN_GROUPS);
 
   return (
-    <AppCtx.Provider value={appCtx}>
-      <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: C.bg, fontFamily: DS.font, color: C.text }}>
-
-        {/* SIDEBAR — generado automáticamente desde pluginRegistry */}
-        <div style={{ width: 220, minWidth: 220, background: "rgba(255,255,255,0.02)", borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", overflowY: "auto" }}>
-          {/* Logo */}
-          <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-            <div style={{ fontSize: 8, letterSpacing: 3, color: C.dim, marginBottom: 3 }}>AWAKE4</div>
-            <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: -0.5, background: "linear-gradient(135deg,#38BDF8,#818CF8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>WELLNESS</div>
-            <div style={{ fontSize: 8, color: C.dim, marginTop: 1 }}>Sistema Modular v4.0</div>
-            {IS_DEMO && <div style={{ fontSize: 8, color: C.warning, marginTop: 3 }}>● MODO DEMO</div>}
+    <AppCtx.Provider value={{ C, user }}>
+      <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>
+        {/* Sidebar */}
+        <div style={{ width: 240, borderRight: `1px solid ${C.border}`, padding: "18px 14px", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", boxSizing: "border-box", overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "0 6px" }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>🌿</div>
+            <div><div style={{ fontSize: 14, fontWeight: 800 }}>Awake4Wellness</div><div style={{ fontSize: 9, color: C.muted }}>v4.0 · {DEMO_CREDENTIALS[rol]?.label || "Médico"}</div></div>
           </div>
 
-          {/* Auto-generated navigation */}
-          <nav style={{ flex: 1, padding: "10px 10px" }}>
-            {grouped.map(group => (
-              <div key={group.id} style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.dim, letterSpacing: 2, padding: "0 8px", marginBottom: 4 }}>
-                  {group.icon} {group.label.toUpperCase()}
-                </div>
-                {group.plugins.map(plugin => (
-                  <button key={plugin.id} onClick={() => navigate(plugin.id)} style={{
-                    width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 9,
-                    border: "none", cursor: "pointer", marginBottom: 2, textAlign: "left", transition: "all 0.15s",
-                    background: screen === plugin.id ? dim(plugin.color) : "transparent",
-                    color: screen === plugin.id ? plugin.color : C.muted,
-                    fontWeight: screen === plugin.id ? 700 : 400, fontSize: 12,
-                    borderLeft: screen === plugin.id ? `2px solid ${plugin.color}` : "2px solid transparent",
-                  }}>
-                    <span style={{ fontSize: 13, width: 18, textAlign: "center" }}>{plugin.icon}</span>
-                    <span style={{ flex: 1 }}>{plugin.name}</span>
-                    {plugin.badge && screen !== plugin.id && (
-                      <span style={{ fontSize: 8, background: dim(plugin.color, 0.2), color: plugin.color, border: `1px solid ${plugin.color}25`, borderRadius: 8, padding: "1px 5px", fontWeight: 700 }}>{plugin.badge}</span>
-                    )}
-                  </button>
-                ))}
+          {groups.map(g => {
+            const plugs = visiblePlugins.filter(p => p.group === g);
+            if (!plugs.length) return null;
+            return (
+              <div key={g} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.dim, letterSpacing: 2, padding: "0 8px", marginBottom: 6 }}>{PLUGIN_GROUPS[g].icon} {PLUGIN_GROUPS[g].label.toUpperCase()}</div>
+                {plugs.map(p => {
+                  const on = active.id === p.id;
+                  return (
+                    <button key={p.id} onClick={() => navigate(p.id)} style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 9, border: "none", cursor: "pointer", marginBottom: 2, textAlign: "left",
+                      background: on ? dim(p.color) : "transparent",
+                      color: on ? p.color : C.muted, fontSize: 12.5, fontWeight: on ? 700 : 500,
+                      borderLeft: on ? `2px solid ${p.color}` : "2px solid transparent",
+                    }}>
+                      <span style={{ fontSize: 15 }}>{p.icon}</span>
+                      <span style={{ flex: 1 }}>{p.name}</span>
+                      {p.badge && <span style={{ fontSize: 8, fontWeight: 800, padding: "1px 6px", borderRadius: 10, background: dim(p.color), color: p.color }}>{p.badge}</span>}
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-          </nav>
+            );
+          })}
 
-          {/* User */}
-          <div style={{ padding: 10, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <Avatar name={user.nombre || user.email || "Dr"} color={rolColor} size={30} />
-              <div style={{ flex: 1, overflow: "hidden" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.nombre || user.email?.split("@")[0]}</div>
-                <div style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, background: `${rolColor}15`, color: rolColor, fontWeight: 700, display: "inline-block", marginTop: 2 }}>{rolIcon} {rol === "admin" ? "Administrador" : rol === "medico" ? "Médico" : "Paciente"}</div>
-              </div>
-            </div>
-            <button onClick={logout} style={{ width: "100%", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: C.danger, borderRadius: 7, padding: "5px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Cerrar Sesión</button>
-          </div>
+          <button onClick={signOut} style={{ marginTop: "auto", width: "100%", padding: "9px", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            Cerrar sesión
+          </button>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          {/* Top bar */}
-          <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(6,11,22,0.9)", backdropFilter: "blur(12px)", borderBottom: `1px solid ${C.border}`, padding: "10px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {screen === "patient-detail" && <button onClick={() => navigate("patients")} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, padding: 0 }}>← Pacientes /</button>}
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
-                {screen === "patient-detail" ? `${contextData?.nombre} ${contextData?.apellido}` : currentPlugin?.name || screen}
-              </span>
-              {currentPlugin?.badge && <Badge color={currentPlugin.color}>{currentPlugin.badge}</Badge>}
+        {/* Main */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <div style={{ borderBottom: `1px solid ${C.border}`, padding: "12px 28px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 13, color: C.muted }}>
+              {active.id === "patient-detail" && active.patient ? `Pacientes / ${active.patient.nombre} ${active.patient.apellido}` : (activePlugin?.name || "")}
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <div style={{ fontSize: 10, color: C.dim }}>{pluginRegistry.length} módulos · {pluginRegistry.filter(p => !p.badge || p.badge === "SDK" || p.badge === "IA" || p.badge === "Beta").length} activos</div>
-              <div style={{ background: C.successDim, border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "3px 10px", fontSize: 10, color: C.success, fontWeight: 700 }}>Sistema Modular v4.0</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>{DEMO_CREDENTIALS[rol]?.icon} {user.email}</span>
+              <Avatar name={user.email} size={30} color={DEMO_CREDENTIALS[rol]?.color || C.primary} />
             </div>
           </div>
-          {/* Plugin content */}
-          <div style={{ padding: 28 }}>
-            {renderPlugin()}
+
+          <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>
+            {active.id === "patient-detail" && active.patient ? (
+              <PatientDetailPlugin patient={active.patient} sessions={sessions} onAddSession={addSession} navigate={navigate} plugins={pluginRegistry} />
+            ) : (
+              <ActiveComp
+                patient={active.patient}
+                patients={patients}
+                sessions={sessions}
+                onAddPatient={addPatient}
+                onAddSession={addSession}
+                navigate={navigate}
+                plugins={pluginRegistry}
+                user={user}
+                C={C}
+              />
+            )}
           </div>
         </div>
       </div>
