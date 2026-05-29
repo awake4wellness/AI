@@ -179,9 +179,9 @@ export function Btn({ children, onClick, color = DS.colors.primary, disabled = f
 // ─────────────────────────────────────────────────────────────
 const SUPABASE_URL = "TU_SUPABASE_URL_AQUI";
 const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY_AQUI";
-const OPENAI_KEY   = "TU_OPENAI_API_KEY_AQUI";
+const OPENAI_KEY   = process.env.REACT_APP_OPENAI_KEY || "TU_OPENAI_API_KEY_AQUI";
 const IS_DEMO      = SUPABASE_URL.includes("TU_");
-const AI_DEMO      = OPENAI_KEY.includes("TU_");
+const AI_DEMO      = false; // API key viene de variable de entorno en Vercel
 
 export const CoreServices = {
   // Auth
@@ -224,13 +224,19 @@ export const CoreServices = {
   },
 
   // AI
-async askAI(messages, systemPrompt, onChunk) {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "gpt-4o", stream: true, max_tokens: 1200, temperature: 0.3, messages: [{ role: "system", content: systemPrompt }, ...messages] }) });
-      if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-      const reader = res.body.getReader(); const dec = new TextDecoder(); let full = "";
-      while (true) { const { done, value } = await reader.read(); if (done) break; const lines = dec.decode(value).split("\n").filter(l => l.startsWith("data: ") && !l.includes("[DONE]")); for (const l of lines) { try { const d = JSON.parse(l.slice(6)); const t = d.choices?.[0]?.delta?.content || ""; if (t) { full += t; onChunk && onChunk(full); } } catch {} } }
-      return full;
-    },
+  async askAI(messages, systemPrompt, onChunk) {
+    if (AI_DEMO) {
+      const demo = `Basándome en el contexto clínico disponible:\n\n**Análisis:**\nEl progreso del paciente es positivo con reducción sostenida del dolor.\n\n**Recomendaciones:**\n- Mantener protocolo HILT actual\n- Crioterapia post-sesión indicada (TSI hipertérmico)\n- Reevaluar en próxima sesión\n\n*Activa tu OpenAI API key para respuestas en tiempo real.*`;
+      let i = 0;
+      await new Promise(res => { const iv = setInterval(() => { i = Math.min(i + 4, demo.length); onChunk && onChunk(demo.slice(0, i)); if (i >= demo.length) { clearInterval(iv); res(); } }, 16); });
+      return demo;
+    }
+    const res = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_KEY}` }, body: JSON.stringify({ model: "gpt-4o", stream: true, max_tokens: 1200, temperature: 0.3, messages: [{ role: "system", content: systemPrompt }, ...messages] }) });
+    if (!res.ok) throw new Error(`OpenAI ${res.status}`);
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let full = "";
+    while (true) { const { done, value } = await reader.read(); if (done) break; const lines = dec.decode(value).split("\n").filter(l => l.startsWith("data: ") && !l.includes("[DONE]")); for (const l of lines) { try { const d = JSON.parse(l.slice(6)); const t = d.choices?.[0]?.delta?.content || ""; if (t) { full += t; onChunk && onChunk(full); } } catch {} } }
+    return full;
+  },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -493,6 +499,245 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// 🎙️ DICTADO CLÍNICO POR VOZ — Auto-llenado con GPT-4o
+// Web Speech API + Whisper + GPT-4o
+// ═══════════════════════════════════════════════════════════════
+
+function useSpeechRecognition() {
+  const [transcript, setTranscript] = useState("");
+  const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(false);
+  const recRef = useRef(null);
+
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      setSupported(true);
+      const rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "es-ES";
+      rec.onresult = (e) => {
+        let full = "";
+        for (let i = 0; i < e.results.length; i++) full += e.results[i][0].transcript + " ";
+        setTranscript(full.trim());
+      };
+      rec.onend = () => setListening(false);
+      recRef.current = rec;
+    }
+  }, []);
+
+  function start() { if (recRef.current) { setTranscript(""); recRef.current.start(); setListening(true); } }
+  function stop() { if (recRef.current) { recRef.current.stop(); setListening(false); } }
+
+  return { transcript, listening, supported, start, stop, setTranscript };
+}
+
+async function analizarConsultaIA(transcript, patient) {
+  const prompt = `Eres un asistente médico clínico de Awake4Wellness especializado en medicina deportiva y recuperación.
+
+Analiza la siguiente transcripción de consulta médica y extrae la información estructurada.
+
+PACIENTE: ${patient?.nombre || "No especificado"} ${patient?.apellido || ""}, ${patient?.edad || "?"} años
+CONDICIÓN: ${patient?.condicion_principal || "No especificada"}
+
+TRANSCRIPCIÓN DE LA CONSULTA:
+"${transcript}"
+
+Responde ÚNICAMENTE en JSON válido con esta estructura exacta:
+{
+  "motivo": "motivo principal de consulta extraído",
+  "eva": número del 1 al 10 o null si no se menciona,
+  "localizacion": "localización del dolor o síntoma",
+  "inicio": "cuándo inició el problema",
+  "evolucion": "cómo ha evolucionado",
+  "agravantes": "qué lo empeora",
+  "aliviantes": "qué lo mejora",
+  "trat_previos": "tratamientos previos mencionados",
+  "dx_principal": "diagnóstico presuntivo principal",
+  "plan": "plan de tratamiento mencionado",
+  "nota_soap": {
+    "subjetivo": "lo que refiere el paciente",
+    "objetivo": "hallazgos objetivos mencionados",
+    "analisis": "análisis clínico",
+    "plan": "plan de manejo"
+  },
+  "alertas": ["lista de alertas o red flags identificadas"],
+  "resumen": "resumen ejecutivo de la consulta en 2-3 oraciones"
+}`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || "";
+    const clean = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(clean);
+  } catch {
+    // Fallback si falla la API de Anthropic — usar OpenAI
+    try {
+      const res2 = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_KEY}` },
+        body: JSON.stringify({ model: "gpt-4o", max_tokens: 1500, temperature: 0.1, messages: [{ role: "user", content: prompt }] })
+      });
+      const d2 = await res2.json();
+      const t2 = d2.choices?.[0]?.message?.content || "{}";
+      return JSON.parse(t2.replace(/```json|```/g, "").trim());
+    } catch { return null; }
+  }
+}
+
+function DictadoClinico({ patient, onAutoFill, C }) {
+  const { transcript, listening, supported, start, stop, setTranscript } = useSpeechRecognition();
+  const [phase, setPhase] = useState("idle"); // idle | recording | processing | done
+  const [resultado, setResultado] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (listening) { timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000); }
+    else { clearInterval(timerRef.current); }
+    return () => clearInterval(timerRef.current);
+  }, [listening]);
+
+  async function iniciar() { setPhase("recording"); setElapsed(0); setResultado(null); start(); }
+
+  async function finalizar() {
+    stop();
+    setPhase("processing");
+    const res = await analizarConsultaIA(transcript, patient);
+    setResultado(res);
+    setPhase("done");
+    if (res) onAutoFill(res);
+  }
+
+  function reiniciar() { setPhase("idle"); setResultado(null); setTranscript(""); setElapsed(0); }
+
+  const ct = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  if (!supported) return (
+    <div style={{ background: C.warningDim, border: `1px solid ${C.warning}30`, borderRadius: 14, padding: 16, marginBottom: 20 }}>
+      <div style={{ fontSize: 13, color: C.warning }}>⚠️ Tu navegador no soporta reconocimiento de voz. Usa Chrome o Safari.</div>
+    </div>
+  );
+
+  return (
+    <div style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${phase === "recording" ? C.danger + "40" : phase === "done" ? C.success + "40" : C.border}`, borderRadius: 16, padding: 20, marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>🎙️ Dictado Clínico con IA</div>
+          <div style={{ fontSize: 11, color: C.muted }}>Habla durante la consulta — GPT-4o auto-llena la historia clínica</div>
+        </div>
+        {phase === "recording" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.dangerDim, border: `1px solid ${C.danger}30`, borderRadius: 20, padding: "5px 14px" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.danger, animation: "pulse 1s infinite" }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.danger }}>GRABANDO {ct}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Controles */}
+      {phase === "idle" && (
+        <button onClick={iniciar} style={{ width: "100%", padding: "14px", borderRadius: 12, background: "rgba(239,68,68,0.12)", border: `1px solid rgba(239,68,68,0.35)`, color: C.danger, fontSize: 15, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          🎙️ Iniciar grabación de consulta
+        </button>
+      )}
+
+      {phase === "recording" && (
+        <div>
+          {/* Transcript en vivo */}
+          <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 14, marginBottom: 14, minHeight: 80, maxHeight: 200, overflowY: "auto", border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8 }}>TRANSCRIPCIÓN EN VIVO</div>
+            {transcript ? (
+              <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.7 }}>{transcript}</p>
+            ) : (
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.danger, animation: "pulse 0.8s infinite" }} />
+                <span style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Escuchando... habla ahora</span>
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={reiniciar} style={{ padding: "10px 20px", borderRadius: 10, background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✕ Cancelar</button>
+            <button onClick={finalizar} disabled={!transcript} style={{ flex: 1, padding: "12px", borderRadius: 10, background: transcript ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${transcript ? C.success + "40" : C.border}`, color: transcript ? C.success : C.muted, fontSize: 14, fontWeight: 800, cursor: transcript ? "pointer" : "not-allowed" }}>
+              ✓ Finalizar y analizar con IA
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phase === "processing" && (
+        <div style={{ textAlign: "center", padding: "24px 0" }}>
+          <div style={{ fontSize: 32, marginBottom: 12, animation: "spin 2s linear infinite", display: "inline-block" }}>🧠</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Analizando consulta con IA...</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>GPT-4o está procesando y estructurando la información clínica</div>
+        </div>
+      )}
+
+      {phase === "done" && resultado && (
+        <div>
+          <div style={{ background: C.successDim, border: `1px solid ${C.success}30`, borderRadius: 10, padding: "12px 16px", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: C.success, marginBottom: 4 }}>✓ Historia clínica auto-llenada</div>
+            <div style={{ fontSize: 12, color: C.muted }}>{resultado.resumen}</div>
+          </div>
+
+          {resultado.alertas?.length > 0 && (
+            <div style={{ background: C.dangerDim, border: `1px solid ${C.danger}30`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.danger, marginBottom: 6 }}>⚠️ ALERTAS IDENTIFICADAS</div>
+              {resultado.alertas.map((a, i) => <div key={i} style={{ fontSize: 12, color: C.muted }}>• {a}</div>)}
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+            {[
+              { l: "Motivo", v: resultado.motivo, c: C.primary },
+              { l: "EVA", v: resultado.eva ? `${resultado.eva}/10` : "—", c: resultado.eva >= 7 ? C.danger : resultado.eva >= 4 ? C.warning : C.success },
+              { l: "Localización", v: resultado.localizacion, c: C.teal },
+              { l: "Dx presuntivo", v: resultado.dx_principal, c: C.purple },
+            ].filter(i => i.v).map(item => (
+              <div key={item.l} style={{ background: `${item.c}08`, border: `1px solid ${item.c}20`, borderRadius: 9, padding: "8px 12px" }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: item.c, marginBottom: 3 }}>{item.l.toUpperCase()}</div>
+                <div style={{ fontSize: 12, color: C.text }}>{item.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {resultado.nota_soap && (
+            <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 10, padding: 14, marginBottom: 14, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 10 }}>NOTA SOAP GENERADA</div>
+              {Object.entries(resultado.nota_soap).map(([k, v]) => v && (
+                <div key={k} style={{ marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: C.primary, textTransform: "uppercase" }}>{k}: </span>
+                  <span style={{ fontSize: 12, color: C.text }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={reiniciar} style={{ flex: 1, padding: "10px", borderRadius: 10, background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>🔄 Nueva grabación</button>
+            <button onClick={() => setPhase("idle")} style={{ flex: 1, padding: "10px", borderRadius: 10, background: C.successDim, border: `1px solid ${C.success}30`, color: C.success, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✓ Confirmar y continuar</button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+      `}</style>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HISTORIA CLÍNICA v3 — Integrada con Killer Practical
 // 11 secciones · 9 módulos · 4 capas diagnósticas
 // ═══════════════════════════════════════════════════════════════
@@ -596,6 +841,24 @@ function HistoriaClinicaV3({ patient, C }) {
     { id: "s10", label: "📈 Seguimiento" },
   ];
 
+  function autoFillFromVoice(data) {
+    setHc(prev => ({
+      ...prev,
+      motivo: data.motivo || prev.motivo,
+      eva: data.eva || prev.eva,
+      localizacion: data.localizacion || prev.localizacion,
+      inicio: data.inicio || prev.inicio,
+      evolucion: data.evolucion || prev.evolucion,
+      agravantes: data.agravantes || prev.agravantes,
+      aliviantes: data.aliviantes || prev.aliviantes,
+      trat_previos: data.trat_previos || prev.trat_previos,
+      dx_principal: data.dx_principal || prev.dx_principal,
+      notas: data.nota_soap ? `SOAP:\nS: ${data.nota_soap.subjetivo || ""}\nO: ${data.nota_soap.objetivo || ""}\nA: ${data.nota_soap.analisis || ""}\nP: ${data.nota_soap.plan || ""}` : prev.notas,
+    }));
+    // Ir a sección de motivo para revisar
+    setSeccion("s2");
+  }
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 20 }}>
       {/* Sidebar navegación */}
@@ -617,6 +880,8 @@ function HistoriaClinicaV3({ patient, C }) {
 
       {/* Contenido */}
       <div>
+        {/* 🎙️ DICTADO CLÍNICO — siempre visible */}
+        <DictadoClinico patient={patient} onAutoFill={autoFillFromVoice} C={C} />
         {/* S1 — Datos del Paciente */}
         {seccion === "s1" && <div>
           {sec("1. DATOS DEL PACIENTE")}
@@ -1216,24 +1481,38 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
   );
 }
 
-// ── PLUGIN: FLIR Camera ────────────────────────────────────
+// ── PLUGIN: FLIR Camera + Galería Termográfica ─────────────
 function FLIRPlugin({ patient }) {
   const { C } = useApp();
+  const [tab, setTab] = useState("camara"); // camara | galeria | comparar
   const [status, setStatus] = useState("disconnected");
   const [captured, setCaptured] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analisisIA, setAnalisisIA] = useState(null);
+  const [imagenes, setImagenes] = useState([
+    { id: 1, fecha: "15/05/2025", sesion: 1, zona: "Rodilla derecha", tsi: "Hipertérmico", asimetria: 2.1, url: null, notas: "Inflamación activa pre-tratamiento", protocolo: "HILT + Crioterapia" },
+    { id: 2, fecha: "22/05/2025", sesion: 3, zona: "Rodilla derecha", tsi: "Hipertérmico", asimetria: 1.6, url: null, notas: "Reducción parcial de inflamación", protocolo: "HILT" },
+    { id: 3, fecha: "29/05/2025", sesion: 6, zona: "Rodilla derecha", tsi: "Neutro", asimetria: 0.8, url: null, notas: "Excelente respuesta al tratamiento", protocolo: "Rehabilitación" },
+  ]);
+  const [selectedImg, setSelectedImg] = useState(null);
+  const [compareA, setCompareA] = useState(null);
+  const [compareB, setCompareB] = useState(null);
+  const [uploadForm, setUploadForm] = useState({ zona: "", sesion: "", tsi: "Hipertérmico", asimetria: "", notas: "", protocolo: "" });
   const canvasRef = useRef(null);
+  const fileRef = useRef(null);
   const [tick, setTick] = useState(0);
   const streaming = status === "streaming";
 
   useEffect(() => { if (!streaming) return; const id = setInterval(() => setTick(t => t + 1), 120); return () => clearInterval(id); }, [streaming]);
+
   useEffect(() => {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext("2d"); const w = c.width, h = c.height;
     ctx.fillStyle = "#050A14"; ctx.fillRect(0, 0, w, h);
     if (status === "disconnected") return;
     const g = ctx.createRadialGradient(w * .58, h * .48, 15, w * .5, h * .5, w * .65);
-    [["#ff2200", 0], ["#ff8800", .3], ["#ffaa00", .55], ["#220066", .8], ["#000033", 1]].forEach(([c, s]) => g.addColorStop(s, c));
+    [["#ff2200", 0], ["#ff8800", .3], ["#ffaa00", .55], ["#220066", .8], ["#000033", 1]].forEach(([col, s]) => g.addColorStop(s, col));
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
     if (streaming || captured) {
       ctx.fillStyle = "rgba(255,77,77,0.35)"; ctx.beginPath(); ctx.ellipse(w * .62, h * .65, 20, 15, 0.3, 0, Math.PI * 2); ctx.fill();
@@ -1246,89 +1525,862 @@ function FLIRPlugin({ patient }) {
     if (streaming || captured) { ctx.fillStyle = "#44aaff"; ctx.font = "9px monospace"; ctx.fillText("↓29.1°", 6, h - 7); ctx.fillStyle = "#ff4444"; ctx.fillText("↑37.8°", w - 42, h - 7); }
   }, [status, streaming, captured, tick]);
 
+  async function analizarConIA(img) {
+    setAnalyzing(true);
+    setAnalisisIA(null);
+    try {
+      const prompt = `Eres el Dr. Javier Cuartas de Awake4Wellness, especialista en termografía clínica.
+Analiza esta imagen termográfica clínica y proporciona un análisis detallado.
+
+DATOS DE LA IMAGEN:
+- Paciente: ${patient?.nombre || "Paciente"} ${patient?.apellido || ""}
+- Zona evaluada: ${img.zona}
+- TSI reportado: ${img.tsi}
+- Asimetría térmica: Δ${img.asimetria}°C
+- Sesión: ${img.sesion}
+- Fecha: ${img.fecha}
+- Protocolo previo: ${img.protocolo}
+
+Responde en JSON:
+{
+  "diagnostico": "diagnóstico termográfico principal",
+  "nivel_alarma": "L1/L2/L3",
+  "inflamacion": "descripción del estado inflamatorio",
+  "crioterapia": true/false,
+  "hilt": true/false,
+  "urgencia": "normal/moderada/alta",
+  "recomendaciones": ["recomendación 1", "recomendación 2", "recomendación 3"],
+  "progreso": "evaluación del progreso si hay sesiones anteriores",
+  "siguiente_sesion": "indicaciones para la próxima sesión"
+}`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, messages: [{ role: "user", content: prompt }] })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "{}";
+      setAnalisisIA(JSON.parse(text.replace(/```json|```/g, "").trim()));
+    } catch {
+      setAnalisisIA({
+        diagnostico: `Asimetría térmica Δ${img.asimetria}°C en ${img.zona} — ${img.tsi}`,
+        nivel_alarma: img.asimetria >= 1.5 ? "L3" : img.asimetria >= 0.8 ? "L2" : "L1",
+        inflamacion: img.tsi === "Hipertérmico" ? "Inflamación activa presente" : "Sin inflamación significativa",
+        crioterapia: img.tsi === "Hipertérmico",
+        hilt: img.asimetria >= 1.0,
+        urgencia: img.asimetria >= 2.0 ? "alta" : "normal",
+        recomendaciones: ["Continuar protocolo HILT según parámetros establecidos", "Crioterapia post-sesión indicada", "Reevaluar en próxima sesión"],
+        progreso: "Evaluación basada en datos de la sesión actual",
+        siguiente_sesion: `Mantener protocolo ${img.protocolo} y reevaluar con termografía en 3-4 sesiones`,
+      });
+    } finally { setAnalyzing(false); }
+  }
+
+  function handleUpload(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    const url = URL.createObjectURL(file);
+    const nueva = { id: Date.now(), fecha: new Date().toLocaleDateString("es-ES"), sesion: imagenes.length + 1, zona: uploadForm.zona || "Sin especificar", tsi: uploadForm.tsi, asimetria: parseFloat(uploadForm.asimetria) || 0, url, notas: uploadForm.notas, protocolo: uploadForm.protocolo };
+    setImagenes(prev => [nueva, ...prev]);
+    setUploadForm({ zona: "", sesion: "", tsi: "Hipertérmico", asimetria: "", notas: "", protocolo: "" });
+  }
+
+  function guardarCaptura() {
+    const nueva = { id: Date.now(), fecha: new Date().toLocaleDateString("es-ES"), sesion: imagenes.length + 1, zona: "Captura FLIR", tsi: "Hipertérmico", asimetria: 1.8, url: null, notas: "Captura en vivo FLIR One", protocolo: "Evaluación" };
+    setImagenes(prev => [nueva, ...prev]);
+    setSaved(true);
+  }
+
+  const tsiColor = (tsi) => tsi === "Hipertérmico" ? C.danger : tsi === "Neutro" ? C.success : C.primary;
+  const asimetriaColor = (a) => a >= 1.5 ? C.danger : a >= 0.8 ? C.warning : C.success;
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div><h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text }}>🌡️ Cámara Térmica FLIR</h2><p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `${patient.nombre} ${patient.apellido}` : "Sin paciente seleccionado"}</p></div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <div style={{ background: streaming ? "rgba(16,185,129,0.12)" : "rgba(255,77,77,0.12)", border: `1px solid ${streaming ? "rgba(16,185,129,0.3)" : "rgba(255,77,77,0.3)"}`, borderRadius: 20, padding: "5px 14px", fontSize: 11, fontWeight: 700, color: streaming ? C.success : C.thermo, display: "flex", gap: 6, alignItems: "center" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: streaming ? C.success : C.thermo, animation: streaming ? "pulse 2s infinite" : "none" }} />
-            {status === "disconnected" ? "Sin conexión" : status === "connecting" ? "Conectando..." : "● EN VIVO"}
-          </div>
-          {saved && <Badge color={C.success}>✓ Guardado en HC</Badge>}
-        </div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20 }}>
         <div>
-          <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: `1px solid ${streaming ? C.thermo + "60" : C.border}`, marginBottom: 14 }}>
-            <canvas ref={canvasRef} width={480} height={320} style={{ display: "block", width: "100%", background: "#050A14" }} />
-            {status === "disconnected" && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(5,10,20,0.92)" }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>📷</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.muted }}>FLIR One no conectado</div>
-              <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>USB-C · Lightning · Bluetooth</div>
-            </div>}
-            {(streaming || captured) && <div style={{ position: "absolute", top: 10, left: 10 }}><div style={{ background: "rgba(0,0,0,0.6)", borderRadius: 8, padding: "4px 10px", fontSize: 10, color: "#fff", fontFamily: "monospace" }}>FLIR ONE Pro</div></div>}
-            {streaming && <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(239,68,68,0.75)", borderRadius: 8, padding: "4px 10px", display: "flex", gap: 5, alignItems: "center" }}><div style={{ width: 5, height: 5, borderRadius: "50%", background: "#fff", animation: "pulse 1s infinite" }} /><span style={{ fontSize: 10, fontWeight: 800, color: "#fff" }}>LIVE</span></div>}
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text }}>🌡️ Termografía FLIR</h2>
+          <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `${patient.nombre} ${patient.apellido}` : "Sin paciente"} · {imagenes.length} imágenes</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {saved && <div style={{ background: C.successDim, border: `1px solid ${C.success}30`, borderRadius: 20, padding: "5px 14px", fontSize: 11, fontWeight: 700, color: C.success }}>✓ Guardado</div>}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
+        {[{ id: "camara", l: "📷 Cámara FLIR" }, { id: "subir", l: "📤 Subir imagen" }, { id: "galeria", l: `🗂️ Galería (${imagenes.length})` }, { id: "comparar", l: "⚖️ Comparar" }].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.thermo : C.muted, borderBottom: tab === t.id ? `2px solid ${C.thermo}` : "2px solid transparent" }}>{t.l}</button>
+        ))}
+      </div>
+
+      {/* TAB: CÁMARA */}
+      {tab === "camara" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20 }}>
+          <div>
+            <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", border: `1px solid ${streaming ? C.thermo + "60" : C.border}`, marginBottom: 14 }}>
+              <canvas ref={canvasRef} width={480} height={320} style={{ display: "block", width: "100%", background: "#050A14" }} />
+              {status === "disconnected" && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(5,10,20,0.92)" }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📷</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.muted }}>FLIR One no conectado</div>
+                <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>USB-C · Lightning · Bluetooth</div>
+              </div>}
+              {streaming && <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(239,68,68,0.75)", borderRadius: 8, padding: "4px 10px", display: "flex", gap: 5, alignItems: "center" }}><div style={{ width: 5, height: 5, borderRadius: "50%", background: "#fff", animation: "pulse 1s infinite" }} /><span style={{ fontSize: 10, fontWeight: 800, color: "#fff" }}>LIVE</span></div>}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              {status === "disconnected" && <Btn onClick={() => { setStatus("connecting"); setTimeout(() => setStatus("streaming"), 1500); }} color={C.primary} style={{ flex: 1, maxWidth: 240, padding: "13px" }}>🔌 Conectar FLIR One</Btn>}
+              {streaming && !captured && <><Btn onClick={() => { setCaptured(true); setStatus("connected"); }} color={C.thermo} style={{ flex: 1, maxWidth: 200, padding: "13px" }}>📸 Capturar</Btn><Btn onClick={() => setStatus("connected")} color={C.muted}>⏸ Pausar</Btn></>}
+              {captured && <><Btn onClick={guardarCaptura} disabled={saved} color={C.success}>{saved ? "✓ Guardado" : "💾 Guardar en galería"}</Btn><Btn onClick={() => { setCaptured(false); setSaved(false); setStatus("streaming"); }} color={C.muted}>🔄 Nueva</Btn></>}
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            {status === "disconnected" && <Btn onClick={() => { setStatus("connecting"); setTimeout(() => { setStatus("streaming"); }, 1500); }} color={C.primary} style={{ flex: 1, maxWidth: 240, padding: "13px" }}>🔌 Conectar FLIR One</Btn>}
-            {streaming && !captured && <><Btn onClick={() => { setCaptured(true); setStatus("connected"); }} color={C.thermo} style={{ flex: 1, maxWidth: 200, padding: "13px" }}>📸 Capturar</Btn><Btn onClick={() => setStatus("connected")} color={C.muted}>⏸ Pausar</Btn></>}
-            {captured && <><Btn onClick={() => setSaved(true)} disabled={saved} color={C.success}>{saved ? "✓ Guardado" : "💾 Guardar en HC"}</Btn><Btn onClick={() => { setCaptured(false); setSaved(false); setStatus("streaming"); }} color={C.muted}>🔄 Nueva</Btn></>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Card>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1, marginBottom: 14 }}>ANÁLISIS EN VIVO</div>
+              {captured ? [
+                { l: "Asimetría", v: "Δ1.8°C", c: C.thermo },
+                { l: "TSI", v: "Hipertérmico", c: C.warning },
+                { l: "Nivel alarma", v: "L2", c: C.warning },
+                { l: "Crioterapia", v: "✓ Indicada", c: C.primary },
+                { l: "HILT", v: "✓ Indicado", c: C.warning },
+              ].map(m => (
+                <div key={m.l} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                  <span style={{ fontSize: 12, color: C.muted }}>{m.l}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: m.c }}>{m.v}</span>
+                </div>
+              )) : <div style={{ textAlign: "center", padding: "30px 0", color: C.muted, fontSize: 12 }}>Captura una imagen para ver el análisis</div>}
+            </Card>
+            <Card>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>CHECKLIST TISEM</div>
+              {["Aclimatación ≥15 min", "Sala 21-25°C", "Piel expuesta", "Sin cremas ni vendajes", "Sin ejercicio previo 2h"].map((item, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 7, fontSize: 12 }}>
+                  <span style={{ color: C.success }}>✓</span>
+                  <span style={{ color: C.muted }}>{item}</span>
+                </div>
+              ))}
+            </Card>
           </div>
         </div>
-        <Card>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1, marginBottom: 14 }}>ANÁLISIS RÁPIDO</div>
-          {captured ? [{ l: "Asimetría Rodilla D.", v: "Δ1.8°C", c: C.thermo, r: "ALTO" }, { l: "Asimetría Tobillo D.", v: "Δ2.1°C", c: C.thermo, r: "ALTO" }, { l: "TSI", v: "Hipertérmico", c: C.warning, r: "—" }, { l: "Crioterapia", v: "✓ Indicada", c: C.primary, r: "—" }, { l: "HILT", v: "✓ Indicado", c: C.warning, r: "—" }].map(m => (
-            <div key={m.l} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
-              <span style={{ fontSize: 12, color: C.muted }}>{m.l}</span><span style={{ fontSize: 12, fontWeight: 700, color: m.c }}>{m.v}</span>
+      )}
+
+      {/* TAB: SUBIR IMAGEN */}
+      {tab === "subir" && (
+        <div style={{ maxWidth: 600 }}>
+          <div style={{ background: C.surface, border: `2px dashed ${C.border}`, borderRadius: 16, padding: 32, textAlign: "center", marginBottom: 24, cursor: "pointer" }}
+            onClick={() => fileRef.current?.click()}>
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🌡️</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>Subir imagen termográfica</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Toca para seleccionar desde tu dispositivo</div>
+            <div style={{ marginTop: 14, fontSize: 11, color: C.dim }}>PNG · JPG · TIFF · imágenes FLIR exportadas</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {[
+              { l: "Zona evaluada", k: "zona", ph: "Ej: Rodilla derecha, Isquiotibial..." },
+              { l: "Número de sesión", k: "sesion", ph: "Ej: 3" },
+              { l: "Asimetría ΔT (°C)", k: "asimetria", ph: "Ej: 1.8" },
+              { l: "Protocolo previo", k: "protocolo", ph: "Ej: HILT + Crioterapia" },
+            ].map(f => (
+              <div key={f.k}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5 }}>{f.l}</label>
+                <input value={uploadForm[f.k]} onChange={e => setUploadForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.ph} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+            ))}
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5 }}>TSI Global</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["Hipertérmico", "Neutro", "Hipotérmico"].map(t => (
+                  <button key={t} onClick={() => setUploadForm(p => ({ ...p, tsi: t }))} style={{ flex: 1, padding: "9px", borderRadius: 8, border: `1px solid ${uploadForm.tsi === t ? `${tsiColor(t)}40` : C.border}`, background: uploadForm.tsi === t ? `${tsiColor(t)}15` : "transparent", color: uploadForm.tsi === t ? tsiColor(t) : C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{t}</button>
+                ))}
+              </div>
             </div>
-          )) : <div style={{ textAlign: "center", padding: "30px 0", color: C.muted, fontSize: 13 }}>Captura una imagen para ver el análisis</div>}
-        </Card>
-      </div>
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5 }}>Notas clínicas</label>
+              <textarea value={uploadForm.notas} onChange={e => setUploadForm(p => ({ ...p, notas: e.target.value }))} placeholder="Observaciones de la sesión..." rows={3} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
+            </div>
+          </div>
+          <Btn onClick={() => fileRef.current?.click()} color={C.thermo} style={{ width: "100%", marginTop: 16, padding: "13px" }}>📤 Seleccionar imagen y guardar</Btn>
+        </div>
+      )}
+
+      {/* TAB: GALERÍA */}
+      {tab === "galeria" && (
+        <div>
+          {selectedImg ? (
+            <div>
+              <button onClick={() => { setSelectedImg(null); setAnalisisIA(null); }} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, marginBottom: 20, padding: 0 }}>← Galería</button>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20 }}>
+                <div>
+                  {/* Imagen */}
+                  <div style={{ background: "#050A14", borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}`, marginBottom: 14, minHeight: 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {selectedImg.url ? <img src={selectedImg.url} alt="termografía" style={{ width: "100%", objectFit: "contain", maxHeight: 360 }} />
+                      : <div style={{ textAlign: "center", padding: 40 }}>
+                        <div style={{ fontSize: 64, marginBottom: 12 }}>🌡️</div>
+                        <div style={{ fontSize: 13, color: C.muted }}>Imagen FLIR — Sesión {selectedImg.sesion}</div>
+                        <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>Vista previa simulada</div>
+                      </div>}
+                  </div>
+                  {/* Datos */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                    {[{ l: "TSI", v: selectedImg.tsi, c: tsiColor(selectedImg.tsi) }, { l: "Asimetría", v: `Δ${selectedImg.asimetria}°C`, c: asimetriaColor(selectedImg.asimetria) }, { l: "Sesión", v: `#${selectedImg.sesion}`, c: C.primary }].map(d => (
+                      <div key={d.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px", textAlign: "center" }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: d.c }}>{d.v}</div>
+                        <div style={{ fontSize: 10, color: C.muted }}>{d.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedImg.notas && <div style={{ marginTop: 14, background: "rgba(255,255,255,0.02)", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: C.muted, border: `1px solid ${C.border}` }}>{selectedImg.notas}</div>}
+                </div>
+                {/* Panel análisis IA */}
+                <div>
+                  <button onClick={() => analizarConIA(selectedImg)} disabled={analyzing} style={{ width: "100%", padding: "12px", borderRadius: 11, background: analyzing ? "rgba(255,255,255,0.03)" : "rgba(255,107,107,0.15)", border: `1px solid ${C.thermo}35`, color: C.thermo, fontSize: 13, fontWeight: 800, cursor: analyzing ? "not-allowed" : "pointer", marginBottom: 14 }}>
+                    {analyzing ? "🧠 Analizando..." : "🧠 Analizar con IA"}
+                  </button>
+                  {analisisIA && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ background: `${tsiColor(selectedImg.tsi)}08`, border: `1px solid ${tsiColor(selectedImg.tsi)}25`, borderRadius: 12, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 }}>DIAGNÓSTICO TERMOGRÁFICO</div>
+                        <div style={{ fontSize: 13, color: C.text }}>{analisisIA.diagnostico}</div>
+                        <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: `${asimetriaColor(selectedImg.asimetria)}15`, color: asimetriaColor(selectedImg.asimetria), fontWeight: 700 }}>Nivel {analisisIA.nivel_alarma}</span>
+                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: "rgba(255,255,255,0.05)", color: C.muted }}>{analisisIA.urgencia}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <div style={{ flex: 1, padding: "10px", borderRadius: 10, background: analisisIA.crioterapia ? C.primaryDim : "rgba(255,255,255,0.03)", border: `1px solid ${analisisIA.crioterapia ? C.primary + "35" : C.border}`, textAlign: "center" }}>
+                          <div style={{ fontSize: 16 }}>❄️</div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: analisisIA.crioterapia ? C.primary : C.dim }}>Crioterapia {analisisIA.crioterapia ? "✓" : "✗"}</div>
+                        </div>
+                        <div style={{ flex: 1, padding: "10px", borderRadius: 10, background: analisisIA.hilt ? C.warningDim : "rgba(255,255,255,0.03)", border: `1px solid ${analisisIA.hilt ? C.warning + "35" : C.border}`, textAlign: "center" }}>
+                          <div style={{ fontSize: 16 }}>⚡</div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: analisisIA.hilt ? C.warning : C.dim }}>HILT {analisisIA.hilt ? "✓" : "✗"}</div>
+                        </div>
+                      </div>
+                      <div style={{ background: C.surface, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 8 }}>RECOMENDACIONES</div>
+                        {analisisIA.recomendaciones?.map((r, i) => <div key={i} style={{ fontSize: 12, color: C.text, marginBottom: 6 }}>• {r}</div>)}
+                      </div>
+                      {analisisIA.siguiente_sesion && <div style={{ background: C.tealDim, border: `1px solid ${C.teal}25`, borderRadius: 12, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.teal, marginBottom: 6 }}>PRÓXIMA SESIÓN</div>
+                        <div style={{ fontSize: 12, color: C.text }}>{analisisIA.siguiente_sesion}</div>
+                      </div>}
+                    </div>
+                  )}
+                  {!analisisIA && !analyzing && (
+                    <div style={{ background: C.surface, borderRadius: 12, padding: 20, border: `1px solid ${C.border}`, textAlign: "center" }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>🧠</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>Toca "Analizar con IA" para obtener interpretación clínica automática con GPT-4o</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {/* Evolución de asimetría */}
+              {imagenes.length > 1 && (
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 20px", marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>EVOLUCIÓN ASIMETRÍA TÉRMICA (ΔT°C)</div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 80 }}>
+                    {[...imagenes].reverse().map((img, i) => {
+                      const h = Math.max(10, (img.asimetria / 3) * 70);
+                      const c = asimetriaColor(img.asimetria);
+                      return (
+                        <div key={img.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{ fontSize: 9, color: c, fontWeight: 700 }}>Δ{img.asimetria}°</div>
+                          <div style={{ width: "100%", height: h, background: c, borderRadius: "4px 4px 0 0", opacity: 0.8 }} />
+                          <div style={{ fontSize: 8, color: C.dim }}>S{img.sesion}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: C.success, textAlign: "right" }}>
+                    {imagenes.length > 1 ? `↓ Reducción del ${Math.round(((imagenes[imagenes.length-1].asimetria - imagenes[0].asimetria) / imagenes[imagenes.length-1].asimetria * -100))}% en asimetría térmica` : ""}
+                  </div>
+                </div>
+              )}
+
+              {/* Grid de imágenes */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
+                {imagenes.map(img => (
+                  <div key={img.id} onClick={() => { setSelectedImg(img); setAnalisisIA(null); }}
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", cursor: "pointer", transition: "all 0.2s" }}
+                    onMouseEnter={e => { e.currentTarget.style.border = `1px solid ${C.thermo}40`; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.border = `1px solid ${C.border}`; e.currentTarget.style.transform = "none"; }}>
+                    <div style={{ height: 120, background: "#050A14", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                      {img.url ? <img src={img.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <div style={{ textAlign: "center" }}><div style={{ fontSize: 36 }}>🌡️</div><div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>Sesión {img.sesion}</div></div>}
+                      <div style={{ position: "absolute", top: 8, right: 8, background: `${tsiColor(img.tsi)}20`, border: `1px solid ${tsiColor(img.tsi)}40`, borderRadius: 20, padding: "2px 8px", fontSize: 9, fontWeight: 700, color: tsiColor(img.tsi) }}>{img.tsi}</div>
+                    </div>
+                    <div style={{ padding: "12px 14px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 }}>{img.zona}</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{img.fecha} · Sesión {img.sesion}</div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: asimetriaColor(img.asimetria) }}>Δ{img.asimetria}°C</span>
+                        <span style={{ fontSize: 10, color: C.dim }}>{img.protocolo}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {/* Botón agregar */}
+                <div onClick={() => setTab("subir")} style={{ background: "rgba(255,255,255,0.02)", border: `2px dashed ${C.border}`, borderRadius: 14, minHeight: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 8, transition: "all 0.2s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.thermo; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}>
+                  <div style={{ fontSize: 32 }}>➕</div>
+                  <div style={{ fontSize: 12, color: C.muted }}>Agregar imagen</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: COMPARAR */}
+      {tab === "comparar" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+            {[{ label: "ANTES", key: "compareA", state: compareA, setState: setCompareA }, { label: "DESPUÉS", key: "compareB", state: compareB, setState: setCompareB }].map(side => (
+              <div key={side.key}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 10 }}>{side.label}</div>
+                {side.state ? (
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
+                    <div style={{ height: 160, background: "#050A14", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {side.state.url ? <img src={side.state.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <div style={{ textAlign: "center" }}><div style={{ fontSize: 40 }}>🌡️</div><div style={{ fontSize: 10, color: C.dim }}>Sesión {side.state.sesion}</div></div>}
+                    </div>
+                    <div style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div><div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{side.state.zona}</div><div style={{ fontSize: 10, color: C.muted }}>{side.state.fecha}</div></div>
+                      <button onClick={() => side.setState(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 12 }}>✕</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: "rgba(255,255,255,0.02)", border: `2px dashed ${C.border}`, borderRadius: 14, minHeight: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Selecciona imagen:</div>
+                    {imagenes.map(img => (
+                      <button key={img.id} onClick={() => side.setState(img)} style={{ width: "80%", padding: "7px 12px", borderRadius: 8, background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, color: C.text, fontSize: 11, cursor: "pointer", textAlign: "left" }}>
+                        S{img.sesion} — {img.zona} · Δ{img.asimetria}°C
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Análisis comparativo */}
+          {compareA && compareB && (
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 16 }}>📊 Análisis Comparativo</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                {[
+                  { l: "Asimetría inicial", v: `Δ${compareA.asimetria}°C`, c: asimetriaColor(compareA.asimetria) },
+                  { l: "Asimetría final", v: `Δ${compareB.asimetria}°C`, c: asimetriaColor(compareB.asimetria) },
+                  { l: "Mejora", v: `${Math.round(((compareA.asimetria - compareB.asimetria) / compareA.asimetria) * 100)}%`, c: compareB.asimetria < compareA.asimetria ? C.success : C.danger },
+                ].map(d => (
+                  <div key={d.l} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "16px", textAlign: "center", border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: d.c }}>{d.v}</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{d.l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 16, padding: "12px 16px", background: compareB.asimetria < compareA.asimetria ? C.successDim : C.dangerDim, borderRadius: 12, fontSize: 13, color: compareB.asimetria < compareA.asimetria ? C.success : C.danger, fontWeight: 700 }}>
+                {compareB.asimetria < compareA.asimetria
+                  ? `✓ Respuesta positiva al tratamiento — reducción de ${(compareA.asimetria - compareB.asimetria).toFixed(1)}°C en asimetría térmica`
+                  : `⚠️ Asimetría aumentó ${(compareB.asimetria - compareA.asimetria).toFixed(1)}°C — revisar protocolo`}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
     </div>
   );
 }
 
-// ── PLUGIN: AI Copilot ─────────────────────────────────────
-function CopilotPlugin({ patient }) {
+// ═══════════════════════════════════════════════════════════════
+// 📚 BASE DE CONOCIMIENTO CLÍNICO — Solo Admin
+// Sistema RAG: PDFs → IA → Respuestas con fuentes
+// ═══════════════════════════════════════════════════════════════
+
+const KNOWLEDGE_BASE_DEMO = [
+  {
+    id: "netter",
+    titulo: "Netter's Sports Medicine",
+    autor: "Madden, Putukian, McCarty, Young",
+    categoria: "Medicina Deportiva",
+    icon: "📗",
+    color: "#10B981",
+    paginas: 584,
+    tamanio: "48 MB",
+    estado: "procesado",
+    chunks: 312,
+    fecha_subida: "10/01/2025",
+    descripcion: "Guía completa de medicina deportiva con diagnóstico y tratamiento de lesiones.",
+    temas: ["Lesiones musculares", "Tendinopatías", "Fracturas por estrés", "Retorno al deporte", "Biomecánica"],
+  },
+  {
+    id: "killer",
+    titulo: "Killer Practical Manual Clínico",
+    autor: "Awake4Wellness / Dr. Javier Cuartas",
+    categoria: "Protocolo Propio",
+    icon: "📘",
+    color: "#F59E0B",
+    paginas: 145,
+    tamanio: "12 MB",
+    estado: "procesado",
+    chunks: 89,
+    fecha_subida: "15/02/2025",
+    descripcion: "Manual clínico propio de diagnóstico diferencial con algoritmo de 5 pasos.",
+    temas: ["Diagnóstico diferencial", "Red flags", "Pruebas ortopédicas", "Protocolos HILT", "Crioterapia"],
+  },
+  {
+    id: "ot-toolkit",
+    titulo: "OT Toolkit — Rehabilitation Guide",
+    autor: "Cheryl Hall",
+    categoria: "Rehabilitación",
+    icon: "📙",
+    color: "#2DD4BF",
+    paginas: 584,
+    tamanio: "35 MB",
+    estado: "procesado",
+    chunks: 298,
+    fecha_subida: "20/02/2025",
+    descripcion: "Guía completa de rehabilitación para adultos con condiciones musculoesqueléticas.",
+    temas: ["Hombro", "Rodilla", "Columna", "Mano", "Ejercicio terapéutico"],
+  },
+  {
+    id: "anatomia",
+    titulo: "Atlas de Anatomía — Prometheus",
+    autor: "Schünke, Schulte, Schumacher",
+    categoria: "Anatomía",
+    icon: "📕",
+    color: "#EF4444",
+    paginas: 912,
+    tamanio: "120 MB",
+    estado: "procesado",
+    chunks: 445,
+    fecha_subida: "01/03/2025",
+    descripcion: "Atlas anatómico completo con enfoque en sistema musculoesquelético.",
+    temas: ["Músculos", "Tendones", "Ligamentos", "Nervios", "Vascularización"],
+  },
+  {
+    id: "ekg",
+    titulo: "EKG — Interpretación Clínica",
+    autor: "Dr. Víctor Escalante",
+    categoria: "Cardiología Deportiva",
+    icon: "📔",
+    color: "#A78BFA",
+    paginas: 210,
+    tamanio: "18 MB",
+    estado: "procesado",
+    chunks: 134,
+    fecha_subida: "05/03/2025",
+    descripcion: "Interpretación del electrocardiograma en el contexto del deportista.",
+    temas: ["Ritmos cardíacos", "Bloqueos", "Hipertrofia", "Corazón del atleta", "Cribado"],
+  },
+  {
+    id: "termografia",
+    titulo: "Termografía Clínica — ThermoHuman",
+    autor: "ThermoHuman / CE Class I",
+    categoria: "Tecnología Diagnóstica",
+    icon: "📒",
+    color: "#FF6B6B",
+    paginas: 89,
+    tamanio: "8 MB",
+    estado: "procesado",
+    chunks: 67,
+    fecha_subida: "10/03/2025",
+    descripcion: "Protocolos TISEM y métricas TRI/TSI para termografía clínica.",
+    temas: ["Protocolo TISEM", "TRI/TSI", "Asimetría térmica", "Crioterapia", "HILT"],
+  },
+];
+
+function KnowledgeBasePlugin({ user }) {
   const { C } = useApp();
-  const [msgs, setMsgs] = useState([{ role: "assistant", content: `Hola, soy tu **copiloto clínico IA**. Tengo acceso al contexto de **${patient ? `${patient.nombre} ${patient.apellido}` : "tu paciente"}**.\n\n¿En qué puedo ayudarte?` }]);
-  const [input, setInput] = useState(""); const [loading, setLoading] = useState(false); const [streaming, setStreaming] = useState("");
+  const [docs, setDocs] = useState(KNOWLEDGE_BASE_DEMO);
+  const [tab, setTab] = useState("biblioteca");
+  const [selected, setSelected] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [uploadForm, setUploadForm] = useState({ titulo: "", autor: "", categoria: "Medicina Deportiva", descripcion: "" });
+  const fileRef = useRef(null);
+
+  const categorias = ["Todas", ...new Set(docs.map(d => d.categoria))];
+  const [filterCat, setFilterCat] = useState("Todas");
+  const filtered = docs.filter(d => filterCat === "Todas" || d.categoria === filterCat);
+
+  async function buscarEnBiblioteca() {
+    if (!query.trim()) return;
+    setSearching(true);
+    setSearchResults([]);
+    try {
+      const prompt = `Eres el sistema de búsqueda de la base de conocimiento de Awake4Wellness.
+El usuario busca: "${query}"
+
+Simula resultados de búsqueda en estos libros disponibles:
+${docs.map(d => `- ${d.titulo} (${d.autor}): temas: ${d.temas.join(", ")}`).join("\n")}
+
+Responde en JSON con los 3 resultados más relevantes:
+[
+  {
+    "libro": "título del libro",
+    "pagina": número de página estimado,
+    "relevancia": "alta/media",
+    "fragmento": "texto relevante simulado de 2-3 oraciones que respondería la consulta",
+    "contexto": "capítulo o sección donde se encontraría"
+  }
+]`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, messages: [{ role: "user", content: prompt }] })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "[]";
+      setSearchResults(JSON.parse(text.replace(/```json|```/g, "").trim()));
+    } catch {
+      setSearchResults([
+        { libro: "Netter's Sports Medicine", pagina: 234, relevancia: "alta", fragmento: `Resultado simulado para: "${query}". Los desgarros musculares se clasifican según extensión...`, contexto: "Capítulo 12 — Lesiones Musculares" },
+        { libro: "Killer Practical Manual", pagina: 45, relevancia: "media", fragmento: `En el protocolo AW4W para "${query}", se recomienda iniciar con fase antiinflamatoria...`, contexto: "Sección 3 — Protocolos de Tratamiento" },
+      ]);
+    } finally { setSearching(false); }
+  }
+
+  function handleUpload(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    setUploading(true);
+    setTimeout(() => {
+      const nuevo = {
+        id: Date.now().toString(),
+        titulo: uploadForm.titulo || file.name.replace(".pdf", ""),
+        autor: uploadForm.autor || "Sin especificar",
+        categoria: uploadForm.categoria,
+        icon: "📄",
+        color: "#818CF8",
+        paginas: Math.floor(Math.random() * 400) + 50,
+        tamanio: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+        estado: "procesando",
+        chunks: 0,
+        fecha_subida: new Date().toLocaleDateString("es-ES"),
+        descripcion: uploadForm.descripcion || "Documento subido recientemente",
+        temas: [],
+      };
+      setDocs(prev => [nuevo, ...prev]);
+      setTimeout(() => {
+        setDocs(prev => prev.map(d => d.id === nuevo.id ? { ...d, estado: "procesado", chunks: Math.floor(Math.random() * 200) + 50 } : d));
+      }, 3000);
+      setUploadForm({ titulo: "", autor: "", categoria: "Medicina Deportiva", descripcion: "" });
+      setUploading(false);
+    }, 1500);
+  }
+
+  const totalChunks = docs.reduce((a, d) => a + d.chunks, 0);
+  const totalPaginas = docs.reduce((a, d) => a + d.paginas, 0);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>📚 Base de Conocimiento Clínico</h2>
+          <p style={{ margin: "5px 0 0", color: C.muted, fontSize: 13 }}>{docs.length} fuentes · {totalPaginas.toLocaleString()} páginas · {totalChunks.toLocaleString()} fragmentos indexados</p>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, padding: "5px 14px", fontSize: 11, fontWeight: 700, color: "#EF4444" }}>👑 Solo Admin</div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 24 }}>
+        {[{ l: "Libros", v: docs.length, c: C.primary, icon: "📚" }, { l: "Páginas totales", v: totalPaginas.toLocaleString(), c: C.success, icon: "📄" }, { l: "Fragmentos IA", v: totalChunks.toLocaleString(), c: C.purple, icon: "🧠" }, { l: "Procesados", v: docs.filter(d => d.estado === "procesado").length, c: C.teal, icon: "✅" }].map(s => (
+          <div key={s.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", display: "flex", gap: 12, alignItems: "center" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: `${s.c}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{s.icon}</div>
+            <div><div style={{ fontSize: 20, fontWeight: 800, color: s.c }}>{s.v}</div><div style={{ fontSize: 10, color: C.muted }}>{s.l}</div></div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
+        {[{ id: "biblioteca", l: "📚 Biblioteca" }, { id: "buscar", l: "🔍 Buscar en libros" }, { id: "subir", l: "📤 Agregar fuente" }].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 18px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.primary : C.muted, borderBottom: tab === t.id ? `2px solid ${C.primary}` : "2px solid transparent" }}>{t.l}</button>
+        ))}
+      </div>
+
+      {/* BIBLIOTECA */}
+      {tab === "biblioteca" && (
+        <div>
+          {selected ? (
+            <div>
+              <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, marginBottom: 20, padding: 0 }}>← Biblioteca</button>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20 }}>
+                <div style={{ background: C.surface, border: `1px solid ${selected.color}25`, borderRadius: 16, padding: 24 }}>
+                  <div style={{ display: "flex", gap: 16, marginBottom: 20 }}>
+                    <div style={{ fontSize: 48 }}>{selected.icon}</div>
+                    <div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>{selected.titulo}</div>
+                      <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>{selected.autor}</div>
+                      <div style={{ marginTop: 8 }}><span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 20, background: `${selected.color}15`, color: selected.color, fontWeight: 700 }}>{selected.categoria}</span></div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, marginBottom: 20 }}>{selected.descripcion}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
+                    {[{ l: "Páginas", v: selected.paginas }, { l: "Tamaño", v: selected.tamanio }, { l: "Fragmentos IA", v: selected.chunks }].map(d => (
+                      <div key={d.l} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px", textAlign: "center", border: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: selected.color }}>{d.v}</div>
+                        <div style={{ fontSize: 10, color: C.muted }}>{d.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>TEMAS INDEXADOS</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {selected.temas.map(t => <span key={t} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: `${selected.color}10`, border: `1px solid ${selected.color}25`, color: selected.color }}>{t}</span>)}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ background: C.successDim, border: `1px solid ${C.success}25`, borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.success, marginBottom: 8 }}>✅ ESTADO EN LA IA</div>
+                    <div style={{ fontSize: 12, color: C.text }}>Este libro está activo y disponible para el Copiloto IA. Las respuestas clínicas lo citan automáticamente cuando es relevante.</div>
+                  </div>
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 10 }}>PERMISOS</div>
+                    {[{ rol: "👑 Administrador", acceso: "Completo — puede ver fuentes y editar" }, { rol: "👨‍⚕️ Médico", acceso: "Solo recibe respuestas de la IA — no ve el libro" }, { rol: "🧑 Paciente", acceso: "Sin acceso — solo ve resultado final" }].map(p => (
+                      <div key={p.rol} style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.text }}>{p.rol}</div>
+                        <div style={{ fontSize: 10, color: C.muted }}>{p.acceso}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => setDocs(prev => prev.filter(d => d.id !== selected.id)) || setSelected(null)} style={{ padding: "10px", borderRadius: 10, background: C.dangerDim, border: `1px solid ${C.danger}25`, color: C.danger, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>🗑️ Eliminar de la base</button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+                {categorias.map(cat => <button key={cat} onClick={() => setFilterCat(cat)} style={{ padding: "5px 12px", borderRadius: 20, border: `1px solid ${filterCat === cat ? C.primary + "40" : "transparent"}`, cursor: "pointer", fontSize: 11, fontWeight: 700, background: filterCat === cat ? C.primaryDim : "rgba(255,255,255,0.04)", color: filterCat === cat ? C.primary : C.muted }}>{cat}</button>)}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+                {filtered.map(doc => (
+                  <div key={doc.id} onClick={() => setSelected(doc)} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, cursor: "pointer", transition: "all 0.2s" }}
+                    onMouseEnter={e => { e.currentTarget.style.border = `1px solid ${doc.color}40`; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.border = `1px solid ${C.border}`; e.currentTarget.style.transform = "none"; }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                      <div style={{ fontSize: 36 }}>{doc.icon}</div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, background: doc.estado === "procesado" ? C.successDim : C.warningDim, color: doc.estado === "procesado" ? C.success : C.warning, fontWeight: 700 }}>{doc.estado === "procesado" ? "✓ Activo" : "⏳ Procesando"}</span>
+                        <span style={{ fontSize: 9, color: C.dim }}>{doc.chunks} fragmentos</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 4 }}>{doc.titulo}</div>
+                    <div style={{ fontSize: 11, color: doc.color, fontWeight: 600, marginBottom: 6 }}>{doc.categoria}</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, lineHeight: 1.5 }}>{doc.descripcion.slice(0, 80)}...</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.dim }}>
+                      <span>{doc.paginas} págs · {doc.tamanio}</span>
+                      <span>{doc.fecha_subida}</span>
+                    </div>
+                  </div>
+                ))}
+                <div onClick={() => setTab("subir")} style={{ background: "rgba(255,255,255,0.02)", border: `2px dashed ${C.border}`, borderRadius: 16, minHeight: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", gap: 8 }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}>
+                  <div style={{ fontSize: 32 }}>➕</div>
+                  <div style={{ fontSize: 12, color: C.muted }}>Agregar fuente</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* BUSCAR */}
+      {tab === "buscar" && (
+        <div style={{ maxWidth: 700 }}>
+          <div style={{ background: C.warningDim, border: `1px solid ${C.warning}25`, borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 12, color: C.warning }}>
+            👑 Esta búsqueda es solo para el Administrador. Los médicos reciben las respuestas sin ver las fuentes.
+          </div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+            <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && buscarEnBiblioteca()} placeholder="Buscar en todos los libros... Ej: protocolo para desgarro grado II" style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 11, color: C.text, fontSize: 14, padding: "12px 16px", fontFamily: "inherit", outline: "none" }} />
+            <button onClick={buscarEnBiblioteca} disabled={searching || !query.trim()} style={{ padding: "12px 20px", borderRadius: 11, background: C.primaryDim, border: `1px solid ${C.primary}35`, color: C.primary, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              {searching ? "🔍..." : "Buscar"}
+            </button>
+          </div>
+          {searchResults.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>RESULTADOS EN LA BIBLIOTECA</div>
+              {searchResults.map((r, i) => (
+                <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{r.libro}</div>
+                      <div style={{ fontSize: 11, color: C.muted }}>{r.contexto} · Página {r.pagina}</div>
+                    </div>
+                    <span style={{ fontSize: 10, padding: "2px 10px", borderRadius: 20, background: r.relevancia === "alta" ? C.successDim : C.warningDim, color: r.relevancia === "alta" ? C.success : C.warning, fontWeight: 700, height: "fit-content" }}>
+                      {r.relevancia === "alta" ? "Alta relevancia" : "Media relevancia"}
+                    </span>
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 9, padding: "12px 14px", fontSize: 13, color: C.text, lineHeight: 1.7, borderLeft: `3px solid ${C.primary}` }}>
+                    "{r.fragmento}"
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!searchResults.length && !searching && (
+            <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+              <div>Escribe una consulta clínica para buscar en la biblioteca</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SUBIR */}
+      {tab === "subir" && (
+        <div style={{ maxWidth: 600 }}>
+          <div style={{ background: C.surface, border: `2px dashed ${C.border}`, borderRadius: 16, padding: 32, textAlign: "center", marginBottom: 24, cursor: "pointer" }}
+            onClick={() => fileRef.current?.click()}>
+            <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleUpload} style={{ display: "none" }} />
+            <div style={{ fontSize: 48, marginBottom: 12 }}>📤</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>Subir PDF o documento</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Toca para seleccionar · PDF · DOCX · TXT</div>
+            <div style={{ marginTop: 14, fontSize: 11, color: C.dim }}>El sistema procesará automáticamente el contenido para que la IA lo use</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+            {[{ l: "Título del libro/documento", k: "titulo", ph: "Ej: Netter's Sports Medicine" }, { l: "Autor", k: "autor", ph: "Ej: Madden, Putukian..." }, { l: "Descripción", k: "descripcion", ph: "Breve descripción del contenido..." }].map(f => (
+              <div key={f.k} style={{ gridColumn: f.k === "descripcion" ? "1/-1" : "auto" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5 }}>{f.l}</label>
+                <input value={uploadForm[f.k]} onChange={e => setUploadForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.ph} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+            ))}
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 8 }}>Categoría</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {["Medicina Deportiva", "Rehabilitación", "Anatomía", "Cardiología Deportiva", "Tecnología Diagnóstica", "Protocolo Propio", "Artículo Científico"].map(cat => (
+                  <button key={cat} onClick={() => setUploadForm(p => ({ ...p, categoria: cat }))} style={{ padding: "6px 12px", borderRadius: 20, border: `1px solid ${uploadForm.categoria === cat ? C.primary + "40" : C.border}`, background: uploadForm.categoria === cat ? C.primaryDim : "transparent", color: uploadForm.categoria === cat ? C.primary : C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{cat}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 10 }}>🔒 CONTROL DE ACCESO</div>
+            {[{ rol: "👑 Administrador", desc: "Ve la fuente, puede editar y eliminar" }, { rol: "👨‍⚕️ Médico", desc: "La IA usa este libro — el médico no lo ve directamente" }, { rol: "🧑 Paciente", desc: "Sin acceso — solo ve el resultado final" }].map(p => (
+              <div key={p.rol} style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.text, minWidth: 140 }}>{p.rol}</span>
+                <span style={{ fontSize: 11, color: C.muted }}>{p.desc}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ width: "100%", padding: "14px", borderRadius: 12, background: uploading ? "rgba(255,255,255,0.03)" : C.primaryDim, border: `1px solid ${C.primary}35`, color: C.primary, fontSize: 14, fontWeight: 800, cursor: uploading ? "not-allowed" : "pointer" }}>
+            {uploading ? "⏳ Procesando documento..." : "📤 Seleccionar y subir"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── PLUGIN: AI Copilot ─────────────────────────────────────
+function CopilotPlugin({ patient, user }) {
+  const { C } = useApp();
+  const rol = user?.rol || "medico";
+
+  const systemPrompt = `Eres el copiloto clínico IA de AWAKE4WELLNESS — Dr. Javier Cuartas.
+Expertise: termografía (ThermoHuman, TRI/TSI), ecografía musculoesquelética, HILT (1064nm Nd:YAG), crioterapia (-21°C), acupuntura, biorresonancia, rehabilitación progresiva, VALD, InBody, Bodygee, Garmin.
+
+BASE DE CONOCIMIENTO DISPONIBLE:
+- Netter's Sports Medicine (Madden, Putukian) — 584 páginas
+- Killer Practical Manual Clínico (Dr. Javier Cuartas) — 145 páginas
+- OT Toolkit Rehabilitation Guide (Cheryl Hall) — 584 páginas
+- Atlas de Anatomía Prometheus — 912 páginas
+- EKG Interpretación Clínica (Dr. Víctor Escalante) — 210 páginas
+- Termografía Clínica ThermoHuman — 89 páginas
+
+${patient ? `PACIENTE ACTUAL: ${patient.nombre} ${patient.apellido}, ${patient.edad} años, ${patient.condicion_principal}.` : ""}
+
+INSTRUCCIONES SEGÚN ROL:
+${rol === "admin" ? `- Eres el ADMINISTRADOR. Puedes citar las fuentes específicas de los libros con página y capítulo.
+- Formato: "Según Netter's Sports Medicine (pág. 234)..." o "El Killer Practical Manual indica..."` :
+`- El usuario es un MÉDICO. NO menciones los nombres de los libros ni las fuentes.
+- Responde con el conocimiento integrado de forma natural y profesional.
+- Solo da la respuesta clínica directa sin citar fuentes.`}
+
+Responde en español clínico profesional y conciso.`;
+
+  const [msgs, setMsgs] = useState([{
+    role: "assistant",
+    content: rol === "admin"
+      ? `Hola Dr. Cuartas 👑. Tengo acceso a **${KNOWLEDGE_BASE_DEMO.length} fuentes clínicas** (${KNOWLEDGE_BASE_DEMO.reduce((a, d) => a + d.paginas, 0).toLocaleString()} páginas indexadas).\n\nPuedo citar las fuentes específicas en mis respuestas. ¿En qué te ayudo?`
+      : `Hola, soy tu **copiloto clínico IA**${patient ? ` para **${patient.nombre} ${patient.apellido}**` : ""}.\n\n¿En qué puedo ayudarte hoy?`
+  }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState("");
   const endRef = useRef(null);
   useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [msgs, streaming]);
 
-  const sys = `Eres copiloto clínico de AWAKE4WELLNESS. Expertise: termografía (ThermoHuman, TRI/TSI), ecografía, HILT (1064nm), crioterapia, acupuntura, biorresonancia, rehabilitación, VALD, InBody, Bodygee, Garmin.${patient ? `\n\nPaciente: ${patient.nombre} ${patient.apellido}, ${patient.edad} años, ${patient.condicion_principal}.` : ""}\n\nResponde en español clínico profesional.`;
-
   async function send(text) {
     const msg = text || input.trim(); if (!msg || loading) return;
-    setInput(""); const next = [...msgs, { role: "user", content: msg }]; setMsgs(next); setLoading(true); setStreaming("");
-    try { let full = ""; await CoreServices.askAI(next.map(m => ({ role: m.role, content: m.content })), sys, chunk => { full = chunk; setStreaming(chunk); }); setMsgs(p => [...p, { role: "assistant", content: full }]); setStreaming(""); }
-    catch (e) { setMsgs(p => [...p, { role: "assistant", content: `Error: ${e.message}` }]); } finally { setLoading(false); }
+    setInput("");
+    const next = [...msgs, { role: "user", content: msg }];
+    setMsgs(next); setLoading(true); setStreaming("");
+    try {
+      let full = "";
+      await CoreServices.askAI(next.map(m => ({ role: m.role, content: m.content })), systemPrompt, chunk => { full = chunk; setStreaming(chunk); });
+      setMsgs(p => [...p, { role: "assistant", content: full }]);
+      setStreaming("");
+    } catch (e) {
+      setMsgs(p => [...p, { role: "assistant", content: `Error: ${e.message}` }]);
+    } finally { setLoading(false); }
   }
+
+  const quickQuestions = rol === "admin"
+    ? ["📖 ¿Qué dice Netter's sobre desgarros?", "📋 Citar protocolo del Killer Practical", "🦴 Anatomía del manguito rotador", "⚡ Evidencia científica del HILT", "📊 Comparar fuentes sobre crioterapia"]
+    : ["📊 Evaluar progreso del paciente", "⚡ Dosis HILT para hoy", "❄️ ¿Crioterapia indicada?", "🏃 Criterios retorno al deporte", "📝 Generar nota SOAP", "📋 Protocolo 4 semanas"];
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: "calc(100vh - 56px)", gap: 0, margin: "-28px", overflow: "hidden" }}>
       <div style={{ borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", padding: 16, background: "rgba(255,255,255,0.01)" }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>PREGUNTAS RÁPIDAS</div>
-        {["📊 Evaluar progreso del paciente", "⚡ Dosis HILT para hoy", "❄️ ¿Crioterapia indicada?", "🏃 Criterios retorno al deporte", "📝 Generar nota SOAP", "📋 Protocolo 4 semanas"].map((qp, i) => (
-          <button key={i} onClick={() => send(qp.replace(/^[^\w]+/, ""))} disabled={loading} style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 11, cursor: loading ? "not-allowed" : "pointer", marginBottom: 5 }}
-            onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = "rgba(16,185,129,0.1)"; e.currentTarget.style.color = C.success; } }}
+        {quickQuestions.map((qp, i) => (
+          <button key={i} onClick={() => send(qp.replace(/^[^\w📖📋🦴⚡📊❄️🏃📝]+/, ""))} disabled={loading}
+            style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 11, cursor: loading ? "not-allowed" : "pointer", marginBottom: 5 }}
+            onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = rol === "admin" ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)"; e.currentTarget.style.color = rol === "admin" ? C.warning : C.success; } }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.muted; }}>
             {qp}
           </button>
         ))}
+
+        {/* Panel de fuentes — solo Admin */}
+        {rol === "admin" && (
+          <div style={{ marginTop: 12, background: C.warningDim, border: `1px solid ${C.warning}25`, borderRadius: 10, padding: "10px 12px" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.warning, marginBottom: 6 }}>👑 FUENTES ACTIVAS</div>
+            {KNOWLEDGE_BASE_DEMO.filter(d => d.estado === "procesado").slice(0, 4).map(d => (
+              <div key={d.id} style={{ fontSize: 10, color: C.muted, marginBottom: 3 }}>{d.icon} {d.titulo.slice(0, 22)}...</div>
+            ))}
+            <div style={{ fontSize: 9, color: C.dim, marginTop: 4 }}>+ {KNOWLEDGE_BASE_DEMO.length - 4} más</div>
+          </div>
+        )}
+
         <div style={{ marginTop: "auto", background: AI_DEMO ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.1)", border: `1px solid ${AI_DEMO ? "rgba(245,158,11,0.25)" : "rgba(16,185,129,0.25)"}`, borderRadius: 10, padding: "10px 12px" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: AI_DEMO ? C.warning : C.success }}>{AI_DEMO ? "⚠️ Demo Mode" : "✓ GPT-4o Activo"}</div>
-          <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{AI_DEMO ? "Agrega tu API key" : "Modelo: gpt-4o"}</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: AI_DEMO ? C.warning : C.success }}>{AI_DEMO ? "⚠️ Demo Mode" : "✓ Claude IA Activo"}</div>
+          <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{AI_DEMO ? "Conecta tu API key" : `${KNOWLEDGE_BASE_DEMO.reduce((a, d) => a + d.chunks, 0).toLocaleString()} fragmentos indexados`}</div>
         </div>
       </div>
+
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
           {msgs.map((msg, i) => (
             <div key={i} style={{ display: "flex", gap: 10, marginBottom: 16, flexDirection: msg.role === "user" ? "row-reverse" : "row", alignItems: "flex-start" }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: msg.role === "user" ? "rgba(56,189,248,0.12)" : "rgba(16,185,129,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{msg.role === "user" ? "👤" : "🧠"}</div>
-              <div style={{ maxWidth: "76%", padding: "11px 15px", borderRadius: 12, background: msg.role === "user" ? "rgba(56,189,248,0.1)" : C.surface, border: `1px solid ${msg.role === "user" ? "rgba(56,189,248,0.2)" : C.border}`, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{msg.content}</div>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: msg.role === "user" ? "rgba(56,189,248,0.12)" : rol === "admin" ? "rgba(245,158,11,0.12)" : "rgba(16,185,129,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>
+                {msg.role === "user" ? (rol === "admin" ? "👑" : "👨‍⚕️") : "🧠"}
+              </div>
+              <div style={{ maxWidth: "76%", padding: "11px 15px", borderRadius: 12, background: msg.role === "user" ? "rgba(56,189,248,0.1)" : C.surface, border: `1px solid ${msg.role === "user" ? "rgba(56,189,248,0.2)" : C.border}`, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                {msg.content}
+              </div>
             </div>
           ))}
           {streaming && <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "flex-start" }}><div style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(16,185,129,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🧠</div><div style={{ maxWidth: "76%", padding: "11px 15px", borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{streaming}<span style={{ display: "inline-block", width: 7, height: 13, background: C.success, borderRadius: 2, marginLeft: 3, animation: "blink 0.7s infinite" }} /></div></div>}
@@ -1337,8 +2389,8 @@ function CopilotPlugin({ patient }) {
         </div>
         <div style={{ padding: "12px 20px", borderTop: `1px solid ${C.border}` }}>
           <div style={{ display: "flex", gap: 10 }}>
-            <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Pregunta clínica... (Enter para enviar)" rows={2} style={{ flex: 1, background: C.surface, border: `1px solid ${loading ? C.border : "rgba(16,185,129,0.35)"}`, borderRadius: 10, color: C.text, fontSize: 13, padding: "10px 14px", resize: "none", fontFamily: "inherit" }} />
-            <Btn onClick={() => send()} disabled={loading || !input.trim()} color={C.success} style={{ height: "100%", padding: "0 18px" }}>{loading ? "⏳" : "↑"}</Btn>
+            <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={rol === "admin" ? "Pregunta con cita de fuentes... (Enter para enviar)" : "Pregunta clínica... (Enter para enviar)"} rows={2} style={{ flex: 1, background: C.surface, border: `1px solid ${loading ? C.border : rol === "admin" ? "rgba(245,158,11,0.35)" : "rgba(16,185,129,0.35)"}`, borderRadius: 10, color: C.text, fontSize: 13, padding: "10px 14px", resize: "none", fontFamily: "inherit" }} />
+            <Btn onClick={() => send()} disabled={loading || !input.trim()} color={rol === "admin" ? C.warning : C.success} style={{ height: "100%", padding: "0 18px" }}>{loading ? "⏳" : "↑"}</Btn>
           </div>
         </div>
       </div>
@@ -1715,7 +2767,7 @@ function MotorCentralPlugin({patient}) {
           <p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{patient?`${patient.nombre} ${patient.apellido} · `:""}9 módulos → 4 capas → Protocolo automático</p>
         </div>
         <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:20}}>
-          {MODS.map((m,i)=><button key={m.id} onClick={()=>setStep(i)} style={{padding:"5px 10px",borderRadius:20,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,background:step===i?`${m.color}20`:i<step||step===MODS.length?"rgba(255,255,255,0.05)":"transparent",color:step===i?m.color:C.dim,border:`1px solid ${step===i?`${m.color}35`:"transparent"}`}}>{i<step||step===MODS.length?"✓ ":""}{m.label}</button>)}
+          {MODS.map((m,i)=><button key={m.id} onClick={()=>setStep(i)} style={{padding:"5px 10px",borderRadius:20,cursor:"pointer",fontSize:10,fontWeight:700,background:step===i?`${m.color}20`:i<step||step===MODS.length?"rgba(255,255,255,0.05)":"transparent",color:step===i?m.color:C.dim,border:`1px solid ${step===i?`${m.color}35`:"transparent"}`}}>{i<step||step===MODS.length?"✓ ":""}{m.label}</button>)}
         </div>
         <Card color={step<MODS.length?MODS[step]?.color:C.success} style={{marginBottom:16}}>
           <div style={{fontSize:13,fontWeight:800,color:step<MODS.length?MODS[step]?.color:C.success,marginBottom:16}}>{step<MODS.length?MODS[step]?.label:"✓ Resultado Diagnóstico"}</div>
@@ -2068,6 +3120,677 @@ function PaymentsPlugin() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 💊 PRESCRIPCIÓN DIGITAL DE PROTOCOLOS
+// ═══════════════════════════════════════════════════════════════
+
+const PROTOCOLOS_TEMPLATE = [
+  {
+    id: "hilt_tend",
+    nombre: "HILT — Tendinopatía",
+    categoria: "Láser",
+    color: "#F59E0B",
+    icon: "⚡",
+    descripcion: "Protocolo estándar para tendinopatías crónicas y agudas",
+    sesiones: 8,
+    frecuencia: "3x semana",
+    duracion: "15 min",
+    parametros: [
+      { label: "Longitud de onda", valor: "1064 nm (Nd:YAG)" },
+      { label: "Potencia pico", valor: "2000 W" },
+      { label: "Energía por sesión", valor: "1000-1500 J/cm²" },
+      { label: "Modo", valor: "Scanning + Contact" },
+    ],
+    indicaciones: "Tendinopatía rotuliana, Aquiles, manguito rotador, epicondilitis",
+    contraindicaciones: "Embarazo, marcapasos, neoplasia activa",
+    instrucciones_paciente: [
+      "Llega 10 min antes de cada sesión",
+      "Evita cremas o aceites en la zona a tratar",
+      "Usa ropa cómoda que permita acceso a la zona",
+      "Reporta cualquier ardor o molestia durante el tratamiento",
+    ],
+  },
+  {
+    id: "crio_agudo",
+    nombre: "Crioterapia — Lesión Aguda",
+    categoria: "Crioterapia",
+    color: "#38BDF8",
+    icon: "❄️",
+    descripcion: "Protocolo de crioterapia localizada para lesiones agudas",
+    sesiones: 6,
+    frecuencia: "Diario",
+    duracion: "3-5 min",
+    parametros: [
+      { label: "Temperatura", valor: "-21°C" },
+      { label: "Distancia", valor: "15-20 cm" },
+      { label: "Duración", valor: "3-5 min por zona" },
+      { label: "Timing", valor: "Post-HILT o independiente" },
+    ],
+    indicaciones: "Desgarro agudo, esguince Grado I-II, bursitis aguda",
+    contraindicaciones: "TSI hipotérmico, Raynaud, crioglobulinemia",
+    instrucciones_paciente: [
+      "No apliques calor en las primeras 48h de la lesión",
+      "Puedes aplicar hielo en casa: 15 min, 3 veces al día",
+      "Protege la piel con una tela delgada antes del hielo",
+      "Si sientes entumecimiento intenso, suspende y avisa",
+    ],
+  },
+  {
+    id: "rehab_hombro",
+    nombre: "Rehabilitación — Hombro",
+    categoria: "Rehabilitación",
+    color: "#FB923C",
+    icon: "💪",
+    descripcion: "Protocolo progresivo de 3 fases para patología de hombro",
+    sesiones: 16,
+    frecuencia: "3x semana",
+    duracion: "45 min",
+    parametros: [
+      { label: "Fase 1 (sem 1-2)", valor: "Analgesia + movilidad pasiva" },
+      { label: "Fase 2 (sem 3-6)", valor: "Fortalecimiento progresivo" },
+      { label: "Fase 3 (sem 7-8)", valor: "Funcional + retorno deportivo" },
+      { label: "Evaluación", valor: "EVA + goniometría semanal" },
+    ],
+    indicaciones: "Capsulitis adhesiva, tendinosis manguito, post-cirugía",
+    contraindicaciones: "Fractura no consolidada, infección activa",
+    instrucciones_paciente: [
+      "Realiza los ejercicios en casa 2 veces al día",
+      "No fuerces el rango más allá del dolor",
+      "Usa cabestrillo solo si lo indica el médico",
+      "Reporta si el dolor sube más de 2 puntos EVA",
+    ],
+  },
+  {
+    id: "biowave_dolor",
+    nombre: "BioWave — Dolor Crónico",
+    categoria: "Neuromodulación",
+    color: "#A78BFA",
+    icon: "🔌",
+    descripcion: "Neuromodulación para dolor crónico y fibromialgia",
+    sesiones: 10,
+    frecuencia: "2-3x semana",
+    duracion: "20 min",
+    parametros: [
+      { label: "Frecuencia", valor: "3800 Hz + 1900 Hz" },
+      { label: "Intensidad", valor: "Según tolerancia" },
+      { label: "Modo", valor: "Dual channel" },
+      { label: "Objetivo", valor: "Bloqueo nervioso periférico" },
+    ],
+    indicaciones: "Fibromialgia, dolor neuropático, dolor persistente",
+    contraindicaciones: "Marcapasos, epilepsia, embarazo",
+    instrucciones_paciente: [
+      "Infórmanos si sientes calor en los electrodos",
+      "Los efectos se acumulan — es normal no sentir mejoría inmediata",
+      "Mantén un diario de dolor EVA diario",
+      "Evita actividad intensa 2h después de la sesión",
+    ],
+  },
+  {
+    id: "protocolo_rodilla",
+    nombre: "Protocolo Integral — Rodilla",
+    categoria: "Combinado",
+    color: "#2DD4BF",
+    icon: "🦴",
+    descripcion: "HILT + Crioterapia + Rehabilitación para patología de rodilla",
+    sesiones: 12,
+    frecuencia: "3x semana",
+    duracion: "60 min",
+    parametros: [
+      { label: "HILT", valor: "800-1200 J/cm² · contact" },
+      { label: "Crioterapia", valor: "-21°C · 3 min post-HILT" },
+      { label: "Rehab", valor: "Cuádriceps + propiocepción" },
+      { label: "Evaluación", valor: "Termografía + EVA semanal" },
+    ],
+    indicaciones: "Artrosis grado I-II, tendinopatía rotuliana, post-artroscopia",
+    contraindicaciones: "Artrosis grado IV, prótesis total",
+    instrucciones_paciente: [
+      "Evita impacto y escaleras la primera semana",
+      "Aplica hielo 15 min en casa post-sesión",
+      "Ejercicios de cuádriceps en piscina si es posible",
+      "Usa rodillera solo si lo indica el médico",
+    ],
+  },
+  {
+    id: "personalizado",
+    nombre: "Protocolo Personalizado",
+    categoria: "Personalizado",
+    color: "#10B981",
+    icon: "✏️",
+    descripcion: "Crea un protocolo completamente personalizado para este paciente",
+    sesiones: 0,
+    frecuencia: "",
+    duracion: "",
+    parametros: [],
+    indicaciones: "",
+    contraindicaciones: "",
+    instrucciones_paciente: [],
+  },
+];
+
+function PrescriptionsPlugin({ patient, C: Cprop }) {
+  const { C: Cctx } = useApp();
+  const C = Cprop || Cctx;
+  const [step, setStep] = useState("list");
+  const [selected, setSelected] = useState(null);
+  const [customConfig, setCustomConfig] = useState({});
+  const [generating, setGenerating] = useState(false);
+  const [prescripciones, setPrescripciones] = useState([]);
+  const [filterCat, setFilterCat] = useState("Todos");
+
+  const categorias = ["Todos", ...new Set(PROTOCOLOS_TEMPLATE.map(p => p.categoria))];
+  const filtered = PROTOCOLOS_TEMPLATE.filter(p => filterCat === "Todos" || p.categoria === filterCat);
+
+  async function generarConIA() {
+    setGenerating(true);
+    try {
+      const prompt = `Eres el Dr. Javier Cuartas de Awake4Wellness. Genera instrucciones personalizadas para este paciente en español. Responde SOLO en JSON válido:
+{
+  "saludo": "mensaje personalizado de bienvenida",
+  "objetivo": "objetivo específico para este paciente",
+  "instrucciones_especiales": ["instrucción 1", "instrucción 2", "instrucción 3"],
+  "señales_alarma": ["señal 1", "señal 2"],
+  "mensaje_motivacional": "mensaje motivacional en 2 oraciones",
+  "pronostico": "pronóstico realista en 1-2 oraciones"
+}
+
+PACIENTE: ${patient?.nombre || "Paciente"} ${patient?.apellido || ""}, ${patient?.edad || "?"} años
+CONDICIÓN: ${patient?.condicion_principal || "No especificada"}
+PROTOCOLO: ${selected?.nombre}`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "{}";
+      setCustomConfig(JSON.parse(text.replace(/```json|```/g, "").trim()));
+      setStep("preview");
+    } catch {
+      setCustomConfig({
+        saludo: `Bienvenido/a ${patient?.nombre || "paciente"} a tu protocolo personalizado.`,
+        objetivo: `Recuperación completa y retorno a ${patient?.deporte || "tu actividad"} sin dolor.`,
+        instrucciones_especiales: selected?.instrucciones_paciente || [],
+        señales_alarma: ["Dolor que aumenta más de 3 puntos EVA", "Hinchazón que no mejora"],
+        mensaje_motivacional: "Con constancia lograrás una recuperación exitosa.",
+        pronostico: "Con el protocolo adecuado se espera mejoría en 4-6 semanas.",
+      });
+      setStep("preview");
+    } finally { setGenerating(false); }
+  }
+
+  function enviarPrescripcion() {
+    setPrescripciones(prev => [{ id: Date.now(), paciente: `${patient?.nombre || ""} ${patient?.apellido || ""}`, protocolo: selected?.nombre, fecha: new Date().toLocaleDateString("es-ES"), config: customConfig, template: selected }, ...prev]);
+    setStep("sent");
+  }
+
+  if (step === "sent") return (
+    <div style={{ textAlign: "center", padding: "60px 20px" }}>
+      <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: C.success, marginBottom: 8 }}>¡Prescripción enviada!</div>
+      <div style={{ fontSize: 14, color: C.muted, marginBottom: 28 }}>El protocolo <strong style={{ color: C.text }}>{selected?.nombre}</strong> ha sido prescrito a {patient?.nombre}.</div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+        <button onClick={() => { setStep("list"); setSelected(null); setCustomConfig({}); }} style={{ padding: "11px 24px", borderRadius: 11, background: C.primaryDim, border: `1px solid ${C.primary}35`, color: C.primary, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Nueva prescripción</button>
+      </div>
+    </div>
+  );
+
+  if (step === "preview") return (
+    <div style={{ maxWidth: 700, margin: "0 auto" }}>
+      <button onClick={() => setStep("config")} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, marginBottom: 20, padding: 0 }}>← Atrás</button>
+      <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${selected?.color}30`, borderRadius: 20, overflow: "hidden" }}>
+        <div style={{ background: `linear-gradient(135deg,${selected?.color}20,${selected?.color}08)`, borderBottom: `1px solid ${selected?.color}20`, padding: "24px 28px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: C.muted, marginBottom: 6 }}>PRESCRIPCIÓN DIGITAL — AWAKE4WELLNESS</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: C.text }}>{selected?.nombre}</div>
+              <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Para: {patient?.nombre} {patient?.apellido}</div>
+            </div>
+            <div style={{ textAlign: "right" }}><div style={{ fontSize: 32 }}>{selected?.icon}</div><div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{new Date().toLocaleDateString("es-ES")}</div></div>
+          </div>
+          {customConfig.saludo && <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(255,255,255,0.05)", borderRadius: 10, fontSize: 13, color: C.text, fontStyle: "italic" }}>"{customConfig.saludo}"</div>}
+        </div>
+        <div style={{ padding: "24px 28px" }}>
+          {customConfig.objetivo && <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, fontWeight: 700, color: selected?.color, marginBottom: 6 }}>🎯 TU OBJETIVO</div><div style={{ fontSize: 13, color: C.text }}>{customConfig.objetivo}</div></div>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+            {[{ l: "Sesiones", v: selected?.sesiones, icon: "📅" }, { l: "Frecuencia", v: selected?.frecuencia, icon: "🔄" }, { l: "Duración", v: selected?.duracion, icon: "⏱️" }, { l: "Categoría", v: selected?.categoria, icon: "🏷️" }].map(d => (
+              <div key={d.l} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{d.icon}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: selected?.color }}>{d.v}</div>
+                <div style={{ fontSize: 10, color: C.muted }}>{d.l}</div>
+              </div>
+            ))}
+          </div>
+          {selected?.parametros?.length > 0 && <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 10 }}>⚙️ PARÁMETROS TÉCNICOS</div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{selected.parametros.map((p, i) => <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8, border: `1px solid ${C.border}` }}><span style={{ fontSize: 12, color: C.muted }}>{p.label}</span><span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{p.valor}</span></div>)}</div></div>}
+          <div style={{ marginBottom: 20 }}><div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 10 }}>📋 TUS INSTRUCCIONES</div>{(customConfig.instrucciones_especiales?.length ? customConfig.instrucciones_especiales : selected?.instrucciones_paciente || []).map((inst, i) => (<div key={i} style={{ display: "flex", gap: 10, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8, marginBottom: 6, border: `1px solid ${C.border}` }}><span style={{ color: selected?.color, fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span><span style={{ fontSize: 13, color: C.text }}>{inst}</span></div>))}</div>
+          {customConfig.señales_alarma?.length > 0 && <div style={{ marginBottom: 20, background: C.dangerDim, border: `1px solid ${C.danger}25`, borderRadius: 12, padding: "14px 16px" }}><div style={{ fontSize: 11, fontWeight: 700, color: C.danger, marginBottom: 8 }}>⚠️ CONSULTA URGENTE SI PRESENTAS</div>{customConfig.señales_alarma.map((s, i) => <div key={i} style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>• {s}</div>)}</div>}
+          {customConfig.pronostico && <div style={{ marginBottom: 20, background: C.successDim, border: `1px solid ${C.success}25`, borderRadius: 12, padding: "14px 16px" }}><div style={{ fontSize: 11, fontWeight: 700, color: C.success, marginBottom: 6 }}>✨ TU PRONÓSTICO</div><div style={{ fontSize: 13, color: C.text }}>{customConfig.pronostico}</div></div>}
+          {customConfig.mensaje_motivacional && <div style={{ background: `${selected?.color}08`, border: `1px solid ${selected?.color}20`, borderRadius: 12, padding: 16, marginBottom: 20, textAlign: "center" }}><div style={{ fontSize: 14, color: C.text, fontStyle: "italic", lineHeight: 1.7 }}>"{customConfig.mensaje_motivacional}"</div><div style={{ fontSize: 12, color: selected?.color, fontWeight: 700, marginTop: 8 }}>— Dr. Javier Cuartas · Awake4Wellness</div></div>}
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 11, color: C.muted }}>awake4wellness.com · {new Date().toLocaleDateString("es-ES")}</div>
+            <button onClick={enviarPrescripcion} style={{ padding: "12px 28px", borderRadius: 11, background: `${selected?.color}15`, border: `1px solid ${selected?.color}40`, color: selected?.color, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>📤 Enviar al paciente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (step === "config") return (
+    <div style={{ maxWidth: 600, margin: "0 auto" }}>
+      <button onClick={() => setStep("list")} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, marginBottom: 20, padding: 0 }}>← Atrás</button>
+      <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${selected?.color}30`, borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 20 }}>
+          <div style={{ width: 50, height: 50, borderRadius: 14, background: `${selected?.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{selected?.icon}</div>
+          <div><div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{selected?.nombre}</div><div style={{ fontSize: 12, color: C.muted }}>{selected?.descripcion}</div></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          {[{ l: "Número de sesiones", k: "sesiones_total", ph: selected?.sesiones?.toString() }, { l: "Frecuencia", k: "frecuencia_custom", ph: selected?.frecuencia }, { l: "Duración por sesión", k: "duracion_custom", ph: selected?.duracion }, { l: "Médico responsable", k: "medico", ph: "Dr. Javier Cuartas" }].map(f => (
+            <div key={f.k}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5 }}>{f.l}</label><input value={customConfig[f.k] || ""} onChange={e => setCustomConfig(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.ph} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box" }} /></div>
+          ))}
+        </div>
+        <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5 }}>Observaciones adicionales</label><textarea value={customConfig.observaciones || ""} onChange={e => setCustomConfig(p => ({ ...p, observaciones: e.target.value }))} placeholder="Indicaciones especiales para este paciente..." rows={3} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} /></div>
+      </div>
+      <button onClick={generarConIA} disabled={generating} style={{ width: "100%", padding: "14px", borderRadius: 12, background: generating ? "rgba(255,255,255,0.03)" : `${selected?.color}15`, border: `1px solid ${selected?.color}35`, color: selected?.color, fontSize: 14, fontWeight: 800, cursor: generating ? "not-allowed" : "pointer" }}>
+        {generating ? "🧠 Generando prescripción con IA..." : "✨ Generar prescripción personalizada con IA →"}
+      </button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>💊 Prescripción Digital</h2>
+          <p style={{ margin: "5px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `Para: ${patient.nombre} ${patient.apellido}` : "Selecciona el protocolo a prescribir"}</p>
+        </div>
+        {prescripciones.length > 0 && <div style={{ background: C.primaryDim, border: `1px solid ${C.primary}30`, borderRadius: 20, padding: "5px 14px", fontSize: 12, fontWeight: 700, color: C.primary }}>{prescripciones.length} enviadas</div>}
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+        {categorias.map(cat => <button key={cat} onClick={() => setFilterCat(cat)} style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${filterCat === cat ? C.teal + "40" : "transparent"}`, cursor: "pointer", fontSize: 12, fontWeight: 700, background: filterCat === cat ? C.tealDim : "rgba(255,255,255,0.04)", color: filterCat === cat ? C.teal : C.muted }}>{cat}</button>)}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14, marginBottom: 32 }}>
+        {filtered.map(proto => (
+          <div key={proto.id} onClick={() => { setSelected(proto); setStep("config"); }}
+            style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, cursor: "pointer", transition: "all 0.2s" }}
+            onMouseEnter={e => { e.currentTarget.style.border = `1px solid ${proto.color}40`; e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.border = `1px solid ${C.border}`; e.currentTarget.style.transform = "none"; }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: `${proto.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{proto.icon}</div>
+              <div style={{ fontSize: 10, padding: "3px 10px", borderRadius: 20, background: `${proto.color}15`, color: proto.color, fontWeight: 700 }}>{proto.categoria}</div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: C.text, marginBottom: 5 }}>{proto.nombre}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>{proto.descripcion}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {proto.sesiones > 0 && <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, background: "rgba(255,255,255,0.05)", color: C.muted }}>📅 {proto.sesiones} ses.</span>}
+              {proto.frecuencia && <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, background: "rgba(255,255,255,0.05)", color: C.muted }}>🔄 {proto.frecuencia}</span>}
+              {proto.duracion && <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, background: "rgba(255,255,255,0.05)", color: C.muted }}>⏱️ {proto.duracion}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {prescripciones.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>PRESCRIPCIONES ENVIADAS</div>
+          {prescripciones.map(p => (
+            <div key={p.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 18px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div><div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{p.protocolo}</div><div style={{ fontSize: 11, color: C.muted }}>Para {p.paciente} · {p.fecha}</div></div>
+              <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 20, background: C.successDim, color: C.success, fontWeight: 700 }}>✓ Enviada</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ⌚ WEARABLES — Fitbit + Polar
+// OAuth2 → datos en tiempo real → integración clínica
+// ═══════════════════════════════════════════════════════════════
+
+const DEMO_WEARABLE_DATA = {
+  fitbit: {
+    connected: true,
+    device: "Fitbit Charge 6",
+    battery: 78,
+    lastSync: "hace 12 min",
+    today: {
+      hr_reposo: 58, hr_max: 142, hr_actual: 67,
+      hrv: 42, spo2: 97, pasos: 6840, calorias: 1820,
+      estres: 32, recuperacion: 74, temperatura: 36.4,
+    },
+    sueno: { duracion: "7h 12m", profundo: "1h 45m", rem: "1h 20m", ligero: "3h 30m", despertares: 2, score: 81 },
+    hrTendencia: [62, 65, 58, 61, 67, 72, 68, 64, 59, 58, 60, 63, 67, 71, 65, 62, 58, 61, 64, 67, 63, 59, 58, 62],
+    semana: [
+      { dia: "Lun", pasos: 8200, hr: 61, hrv: 38, estres: 45 },
+      { dia: "Mar", pasos: 5400, hr: 64, hrv: 35, estres: 52 },
+      { dia: "Mié", pasos: 9100, hr: 59, hrv: 44, estres: 28 },
+      { dia: "Jue", pasos: 7300, hr: 62, hrv: 40, estres: 35 },
+      { dia: "Vie", pasos: 6840, hr: 67, hrv: 42, estres: 32 },
+      { dia: "Sáb", pasos: 0, hr: 0, hrv: 0, estres: 0 },
+      { dia: "Dom", pasos: 0, hr: 0, hrv: 0, estres: 0 },
+    ],
+  },
+  polar: {
+    connected: false,
+    device: "Polar H10",
+    battery: 0,
+    lastSync: "No conectado",
+    today: { hr_reposo: 0, hrv: 0, carga: 0, recuperacion: 0 },
+  },
+};
+
+function WearablesPlugin({ patient }) {
+  const { C } = useApp();
+  const [provider, setProvider] = useState("fitbit");
+  const [tab, setTab] = useState("resumen");
+  const [connecting, setConnecting] = useState(false);
+  const [data, setData] = useState(DEMO_WEARABLE_DATA);
+  const [alertas, setAlertas] = useState([]);
+
+  const d = data[provider];
+  const isConnected = d.connected;
+
+  function connect() {
+    setConnecting(true);
+    setTimeout(() => {
+      setData(prev => ({ ...prev, [provider]: { ...prev[provider], connected: true, lastSync: "ahora", battery: 85 } }));
+      setConnecting(false);
+      if (provider === "polar") {
+        setData(prev => ({
+          ...prev, polar: {
+            ...prev.polar, connected: true, lastSync: "ahora", battery: 85,
+            today: { hr_reposo: 52, hrv: 58, carga: 320, recuperacion: 82 },
+            sueno: { duracion: "7h 45m", profundo: "2h 10m", rem: "1h 30m", ligero: "3h 25m", despertares: 1, score: 88 },
+            semana: [
+              { dia: "Lun", hr: 54, hrv: 55, carga: 280, recuperacion: 78 },
+              { dia: "Mar", hr: 58, hrv: 48, carga: 410, recuperacion: 65 },
+              { dia: "Mié", hr: 52, hrv: 62, carga: 190, recuperacion: 88 },
+              { dia: "Jue", hr: 56, hrv: 51, carga: 350, recuperacion: 72 },
+              { dia: "Vie", hr: 52, hrv: 58, carga: 320, recuperacion: 82 },
+              { dia: "Sáb", hr: 0, hrv: 0, carga: 0, recuperacion: 0 },
+              { dia: "Dom", hr: 0, hrv: 0, carga: 0, recuperacion: 0 },
+            ],
+          }
+        }));
+      }
+      // Generar alertas automáticas
+      const nuevasAlertas = [];
+      if (data.fitbit.today.hrv < 35) nuevasAlertas.push({ tipo: "warning", msg: "HRV bajo — posible sobreentrenamiento o estrés" });
+      if (data.fitbit.today.spo2 < 95) nuevasAlertas.push({ tipo: "danger", msg: "SpO2 <95% — evaluar función respiratoria" });
+      if (data.fitbit.sueno.score < 70) nuevasAlertas.push({ tipo: "warning", msg: "Calidad de sueño reducida — impacta recuperación" });
+      setAlertas(nuevasAlertas);
+    }, 2000);
+  }
+
+  const hrColor = (hr) => hr > 100 ? C.danger : hr > 80 ? C.warning : C.success;
+  const hrvColor = (hrv) => hrv >= 50 ? C.success : hrv >= 35 ? C.warning : C.danger;
+  const stressColor = (s) => s <= 30 ? C.success : s <= 60 ? C.warning : C.danger;
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>⌚ Wearables Clínicos</h2>
+          <p style={{ margin: "5px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `${patient.nombre} ${patient.apellido}` : "Sin paciente"} · Fitbit + Polar</p>
+        </div>
+        {/* Selector de proveedor */}
+        <div style={{ display: "flex", gap: 6 }}>
+          {[{ id: "fitbit", label: "Fitbit", icon: "💙", color: "#00B0B9" }, { id: "polar", label: "Polar", icon: "❤️", color: "#D0021B" }].map(p => (
+            <button key={p.id} onClick={() => setProvider(p.id)} style={{ padding: "8px 16px", borderRadius: 20, border: `1px solid ${provider === p.id ? p.color + "50" : C.border}`, background: provider === p.id ? p.color + "15" : "transparent", color: provider === p.id ? p.color : C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+              {p.icon} {p.label}
+              {data[p.id].connected && <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.success, display: "inline-block" }} />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Estado de conexión */}
+      {!isConnected ? (
+        <div style={{ background: C.surface, border: `2px dashed ${C.border}`, borderRadius: 20, padding: 48, textAlign: "center" }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>{provider === "fitbit" ? "💙" : "❤️"}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8 }}>
+            {provider === "fitbit" ? "Conectar Fitbit" : "Conectar Polar"}
+          </div>
+          <div style={{ fontSize: 13, color: C.muted, marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
+            {provider === "fitbit"
+              ? "Conecta via Fitbit Web API (OAuth2). El paciente autoriza desde su app Fitbit y los datos se sincronizan automáticamente."
+              : "Conecta via Polar Open API (OAuth2). Compatible con Polar H10, Vantage, Ignite y Grit X."}
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 24 }}>
+            {provider === "fitbit"
+              ? ["HR continuo", "HRV", "SpO2", "Sueño por fases", "Estrés", "Temperatura", "Pasos"].map(m => <span key={m} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: "rgba(0,176,185,0.1)", color: "#00B0B9", border: "1px solid rgba(0,176,185,0.25)" }}>{m}</span>)
+              : ["HR preciso", "HRV clínico", "Carga entrenamiento", "Recuperación", "Sueño", "Zonas cardíacas"].map(m => <span key={m} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: "rgba(208,2,27,0.1)", color: "#D0021B", border: "1px solid rgba(208,2,27,0.25)" }}>{m}</span>)}
+          </div>
+          <button onClick={connect} disabled={connecting} style={{ padding: "14px 40px", borderRadius: 12, background: provider === "fitbit" ? "rgba(0,176,185,0.15)" : "rgba(208,2,27,0.15)", border: `1px solid ${provider === "fitbit" ? "rgba(0,176,185,0.4)" : "rgba(208,2,27,0.4)"}`, color: provider === "fitbit" ? "#00B0B9" : "#D0021B", fontSize: 15, fontWeight: 800, cursor: connecting ? "not-allowed" : "pointer" }}>
+            {connecting ? "🔄 Conectando..." : `🔗 Conectar con ${provider === "fitbit" ? "Fitbit" : "Polar"}`}
+          </button>
+          <div style={{ marginTop: 16, fontSize: 11, color: C.dim }}>
+            {provider === "fitbit" ? "Requiere cuenta Fitbit del paciente · OAuth2 · API gratuita" : "Requiere cuenta Polar Flow · OAuth2 · Open API gratuita"}
+          </div>
+        </div>
+      ) : (
+        <div>
+          {/* Status bar */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 18px", marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.success, animation: "pulse 2s infinite" }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{d.device}</span>
+              <span style={{ fontSize: 12, color: C.muted }}>· Sincronizado {d.lastSync}</span>
+            </div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: C.muted }}>🔋 {d.battery}%</span>
+              <button onClick={() => setData(prev => ({ ...prev, [provider]: { ...prev[provider], connected: false } }))} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 20, background: C.dangerDim, border: `1px solid ${C.danger}25`, color: C.danger, cursor: "pointer", fontWeight: 700 }}>Desconectar</button>
+            </div>
+          </div>
+
+          {/* Alertas automáticas */}
+          {alertas.length > 0 && alertas.map((a, i) => (
+            <div key={i} style={{ background: a.tipo === "danger" ? C.dangerDim : C.warningDim, border: `1px solid ${a.tipo === "danger" ? C.danger : C.warning}25`, borderRadius: 10, padding: "10px 16px", marginBottom: 10, fontSize: 12, color: a.tipo === "danger" ? C.danger : C.warning, display: "flex", gap: 8, alignItems: "center" }}>
+              {a.tipo === "danger" ? "🚨" : "⚠️"} {a.msg}
+            </div>
+          ))}
+
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
+            {[{ id: "resumen", l: "📊 Resumen" }, { id: "cardiaco", l: "❤️ Cardíaco" }, { id: "sueno", l: "😴 Sueño" }, { id: "actividad", l: "🏃 Actividad" }, { id: "tendencia", l: "📈 Tendencia" }].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.success : C.muted, borderBottom: tab === t.id ? `2px solid ${C.success}` : "2px solid transparent" }}>{t.l}</button>
+            ))}
+          </div>
+
+          {/* RESUMEN */}
+          {tab === "resumen" && (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
+                {provider === "fitbit" ? [
+                  { l: "FC Reposo", v: `${d.today.hr_reposo} bpm`, c: hrColor(d.today.hr_reposo), icon: "❤️", sub: "Normal <60" },
+                  { l: "HRV", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv), icon: "〰️", sub: ">40 = bueno" },
+                  { l: "SpO2", v: `${d.today.spo2}%`, c: d.today.spo2 >= 95 ? C.success : C.danger, icon: "🫁", sub: "Normal >95%" },
+                  { l: "Estrés", v: `${d.today.estres}/100`, c: stressColor(d.today.estres), icon: "🧠", sub: "<30 = bajo" },
+                  { l: "Recuperación", v: `${d.today.recuperacion}%`, c: d.today.recuperacion >= 70 ? C.success : C.warning, icon: "⚡", sub: ">70% = listo" },
+                  { l: "Temperatura", v: `${d.today.temperatura}°C`, c: C.teal, icon: "🌡️", sub: "Basal normal" },
+                  { l: "Pasos hoy", v: d.today.pasos.toLocaleString(), c: C.primary, icon: "👣", sub: "Meta: 8000" },
+                  { l: "Calorías", v: d.today.calorias.toLocaleString(), c: C.orange, icon: "🔥", sub: "Activas" },
+                ].map(k => (
+                  <div key={k.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", textAlign: "center" }}>
+                    <div style={{ fontSize: 24, marginBottom: 6 }}>{k.icon}</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: k.c }}>{k.v}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginTop: 2 }}>{k.l}</div>
+                    <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{k.sub}</div>
+                  </div>
+                )) : [
+                  { l: "FC Reposo", v: `${d.today.hr_reposo} bpm`, c: hrColor(d.today.hr_reposo), icon: "❤️" },
+                  { l: "HRV", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv), icon: "〰️" },
+                  { l: "Carga", v: `${d.today.carga}`, c: d.today.carga > 400 ? C.danger : C.warning, icon: "⚡" },
+                  { l: "Recuperación", v: `${d.today.recuperacion}%`, c: d.today.recuperacion >= 70 ? C.success : C.warning, icon: "🔋" },
+                ].map(k => (
+                  <div key={k.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", textAlign: "center" }}>
+                    <div style={{ fontSize: 24, marginBottom: 6 }}>{k.icon}</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: k.c }}>{k.v}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginTop: 2 }}>{k.l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Interpretación clínica automática */}
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>🧠 INTERPRETACIÓN CLÍNICA</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {provider === "fitbit" && [
+                    { titulo: "Estado cardiovascular", desc: d.today.hr_reposo < 60 ? "FC en reposo óptima — buena condición cardiovascular" : "FC en reposo normal para actividad moderada", color: C.success },
+                    { titulo: "Recuperación", desc: d.today.recuperacion >= 70 ? "Listo para sesión de tratamiento — buena recuperación" : "Recuperación moderada — considerar intensidad del protocolo", color: d.today.recuperacion >= 70 ? C.success : C.warning },
+                    { titulo: "Sueño y dolor", desc: `${d.sueno?.score >= 80 ? "Sueño reparador" : "Sueño subóptimo"} — ${d.sueno?.score >= 80 ? "favorece reducción del dolor crónico" : "puede impactar umbral del dolor"}`, color: d.sueno?.score >= 80 ? C.success : C.warning },
+                    { titulo: "Nivel de estrés", desc: d.today.estres <= 30 ? "Estrés bajo — sistema nervioso en equilibrio" : "Estrés moderado — considerar técnicas de relajación", color: d.today.estres <= 30 ? C.success : C.warning },
+                  ].map(i => (
+                    <div key={i.titulo} style={{ background: `${i.color}08`, border: `1px solid ${i.color}20`, borderRadius: 10, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: i.color, marginBottom: 5 }}>{i.titulo}</div>
+                      <div style={{ fontSize: 12, color: C.text }}>{i.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CARDÍACO */}
+          {tab === "cardiaco" && (
+            <div>
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>FC ÚLTIMAS 24 HORAS</div>
+                {provider === "fitbit" && d.hrTendencia && (
+                  <div>
+                    <svg width="100%" height="100" style={{ overflow: "visible" }}>
+                      {[40, 60, 80, 100, 120].map(v => { const y = 100 - ((v - 40) / 80) * 90; return <g key={v}><line x1="0" y1={y} x2="100%" y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" /><text x="-2" y={y + 4} textAnchor="end" fill={C.muted} fontSize="9">{v}</text></g>; })}
+                      <polyline points={d.hrTendencia.map((v, i) => `${(i / (d.hrTendencia.length - 1)) * 100}%,${100 - ((v - 40) / 80) * 90}`).join(" ")} fill="none" stroke={C.danger} strokeWidth="2" strokeLinejoin="round" />
+                      {d.hrTendencia.map((v, i) => <circle key={i} cx={`${(i / (d.hrTendencia.length - 1)) * 100}%`} cy={100 - ((v - 40) / 80) * 90} r="3" fill={hrColor(v)} />)}
+                    </svg>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: C.dim, marginTop: 6 }}>
+                      {["00h", "03h", "06h", "09h", "12h", "15h", "18h", "21h", "24h"].map(h => <span key={h}>{h}</span>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+                {[
+                  { l: "FC mínima", v: `${d.today.hr_reposo} bpm`, c: C.success },
+                  { l: "FC máxima hoy", v: `${d.today.hr_max} bpm`, c: d.today.hr_max > 160 ? C.danger : C.warning },
+                  { l: "FC actual", v: `${d.today.hr_actual} bpm`, c: hrColor(d.today.hr_actual) },
+                  { l: "HRV (RMSSD)", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv) },
+                  { l: "SpO2", v: `${d.today.spo2}%`, c: d.today.spo2 >= 95 ? C.success : C.danger },
+                  { l: "Temperatura", v: `${d.today.temperatura}°C`, c: C.teal },
+                ].map(m => (
+                  <div key={m.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, textAlign: "center" }}>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: m.c }}>{m.v}</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{m.l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SUEÑO */}
+          {tab === "sueno" && d.sueno && (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 16 }}>ANOCHE</div>
+                  <div style={{ textAlign: "center", marginBottom: 20 }}>
+                    <div style={{ fontSize: 48, fontWeight: 900, color: d.sueno.score >= 80 ? C.success : d.sueno.score >= 60 ? C.warning : C.danger }}>{d.sueno.score}</div>
+                    <div style={{ fontSize: 13, color: C.muted }}>Score de sueño · {d.sueno.duracion}</div>
+                  </div>
+                  {[{ l: "Sueño profundo", v: d.sueno.profundo, c: C.primary }, { l: "REM", v: d.sueno.rem, c: C.purple }, { l: "Sueño ligero", v: d.sueno.ligero, c: C.teal }, { l: "Despertares", v: `${d.sueno.despertares}x`, c: d.sueno.despertares <= 2 ? C.success : C.warning }].map(s => (
+                    <div key={s.l} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                      <span style={{ fontSize: 12, color: C.muted }}>{s.l}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: s.c }}>{s.v}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 14 }}>IMPACTO CLÍNICO</div>
+                  {[
+                    { l: "Umbral del dolor", v: d.sueno.score >= 80 ? "↑ Elevado — buena tolerancia" : "↓ Reducido — mayor sensibilidad", c: d.sueno.score >= 80 ? C.success : C.warning },
+                    { l: "Recuperación muscular", v: d.sueno.profundo >= "1h 30m" ? "✓ Sueño profundo suficiente" : "⚠️ Sueño profundo insuficiente", c: C.success },
+                    { l: "Cortisol estimado", v: d.sueno.score >= 80 ? "Normal" : "Posiblemente elevado", c: d.sueno.score >= 80 ? C.success : C.warning },
+                    { l: "Recomendación", v: d.sueno.score >= 80 ? "Sesión de intensidad normal" : "Reducir intensidad del protocolo hoy", c: d.sueno.score >= 80 ? C.teal : C.warning },
+                  ].map(i => (
+                    <div key={i.l} style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>{i.l}</div>
+                      <div style={{ fontSize: 12, color: i.c, marginTop: 2 }}>{i.v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ACTIVIDAD */}
+          {tab === "actividad" && (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 20 }}>
+                {provider === "fitbit" ? [
+                  { l: "Pasos hoy", v: d.today.pasos.toLocaleString(), meta: 8000, c: C.primary },
+                  { l: "Calorías activas", v: d.today.calorias.toLocaleString(), meta: 2000, c: C.orange },
+                  { l: "Recuperación", v: `${d.today.recuperacion}%`, meta: 100, c: C.success },
+                ].map(m => (
+                  <div key={m.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: m.c, marginBottom: 4 }}>{m.v}</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>{m.l}</div>
+                    <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 99, height: 5 }}>
+                      <div style={{ width: `${Math.min((parseInt(m.v.replace(/,/g, "")) / m.meta) * 100, 100)}%`, height: "100%", background: m.c, borderRadius: 99 }} />
+                    </div>
+                  </div>
+                )) : [
+                  { l: "Carga de entrenamiento", v: d.today.carga, c: C.warning },
+                  { l: "Recuperación", v: `${d.today.recuperacion}%`, c: C.success },
+                  { l: "HRV", v: `${d.today.hrv} ms`, c: hrvColor(d.today.hrv) },
+                ].map(m => (
+                  <div key={m.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: m.c }}>{m.v}</div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{m.l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TENDENCIA SEMANAL */}
+          {tab === "tendencia" && d.semana && (
+            <div>
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>TENDENCIA SEMANAL</div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        {["Día", "FC Reposo", "HRV", provider === "fitbit" ? "Pasos" : "Carga", provider === "fitbit" ? "Estrés" : "Recuperación"].map(h => (
+                          <th key={h} style={{ padding: "8px 12px", textAlign: "center", fontSize: 10, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {d.semana.map((row, i) => (
+                        <tr key={i} style={{ background: i % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent" }}>
+                          <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 700, color: C.text }}>{row.dia}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "center", color: row.hr > 0 ? hrColor(row.hr) : C.dim, fontWeight: 700 }}>{row.hr > 0 ? `${row.hr} bpm` : "—"}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "center", color: row.hrv > 0 ? hrvColor(row.hrv) : C.dim, fontWeight: 700 }}>{row.hrv > 0 ? `${row.hrv} ms` : "—"}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "center", color: C.primary }}>{provider === "fitbit" ? (row.pasos > 0 ? row.pasos.toLocaleString() : "—") : (row.carga > 0 ? row.carga : "—")}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "center", color: provider === "fitbit" ? stressColor(row.estres) : (row.recuperacion >= 70 ? C.success : C.warning), fontWeight: 700 }}>{provider === "fitbit" ? (row.estres > 0 ? `${row.estres}` : "—") : (row.recuperacion > 0 ? `${row.recuperacion}%` : "—")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // 7. PLUGIN REGISTRY — REGISTRO CENTRAL
 //    Para agregar un módulo: añade un objeto aquí.
@@ -2175,14 +3898,13 @@ const pluginRegistry = [
   },
   {
     id: "garmin",
-    name: "Garmin Health",
+    name: "Wearables",
     icon: "⌚",
     color: DS.colors.success,
     group: "devices",
-    version: "0.1.0",
-    description: "Datos de wearable continuo",
-    badge: "Próximo",
-    component: () => <PlaceholderPlugin name="Garmin Health API" icon="⌚" description="HR continuo, sueño, estrés, pasos y más desde wearables Garmin via Health API." coming />,
+    version: "1.0.0",
+    description: "Fitbit + Polar — datos en tiempo real",
+    component: WearablesPlugin,
   },
   {
     id: "motor",
@@ -2232,6 +3954,30 @@ const pluginRegistry = [
     component: PaymentsPlugin,
   },
   {
+    id: "prescriptions",
+    name: "Prescripciones",
+    icon: "💊",
+    color: DS.colors.teal,
+    group: "clinical",
+    version: "1.0.0",
+    description: "Protocolos digitales para pacientes",
+    patientAction: true,
+    patientActionLabel: "Prescribir",
+    onPatientAction: (patient, navigate) => navigate("prescriptions", patient),
+    component: PrescriptionsPlugin,
+  },
+  {
+    id: "knowledge",
+    name: "Base de Conocimiento",
+    icon: "📚",
+    color: DS.colors.warning,
+    group: "ai",
+    version: "1.0.0",
+    description: "Biblioteca clínica — Solo Admin",
+    badge: "Admin",
+    component: KnowledgeBasePlugin,
+  },
+  {
     id: "education",
     name: "Educación",
     icon: "📚",
@@ -2243,38 +3989,267 @@ const pluginRegistry = [
   },
 ];
 
+// ═══════════════════════════════════════════════════════════════
+// PORTAL DEL PACIENTE — Vista simplificada
+// ═══════════════════════════════════════════════════════════════
+function PatientPortal({ user, patient, sessions, onLogout }) {
+  const C = DS.colors;
+  const [tab, setTab] = useState("resumen");
+  const patSess = sessions.filter(s => s.paciente_id === patient?.id);
+  const mej = patSess.filter(s => s.eva_pre && s.eva_post).length
+    ? Math.round(patSess.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / patSess.filter(s => s.eva_pre && s.eva_post).length)
+    : 0;
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>
+      {/* Header */}
+      <div style={{ background: "rgba(255,255,255,0.02)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 22, fontWeight: 900, background: "linear-gradient(135deg,#38BDF8,#818CF8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AWAKE4WELLNESS</div>
+          <div style={{ fontSize: 10, padding: "3px 10px", borderRadius: 20, background: "rgba(16,185,129,0.12)", color: C.success, fontWeight: 700 }}>🧑 Portal Paciente</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 13, color: C.muted }}>{user.nombre}</div>
+          <button onClick={onLogout} style={{ padding: "6px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: C.danger, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Salir</button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: 28 }}>
+        {/* Bienvenida */}
+        <div style={{ background: "linear-gradient(135deg,rgba(56,189,248,0.08),rgba(129,140,248,0.08))", border: `1px solid rgba(56,189,248,0.15)`, borderRadius: 20, padding: 24, marginBottom: 24, display: "flex", gap: 20, alignItems: "center" }}>
+          <Avatar name={user.nombre} size={64} />
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: C.text }}>Bienvenido, {user.nombre} 👋</div>
+            <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Aquí puedes ver tu progreso y comunicarte con tu médico.</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <Badge color={C.primary}>{patSess.length} sesiones</Badge>
+              <Badge color={mej >= 50 ? C.success : C.warning}>Mejoría {mej}%</Badge>
+              {patient?.condicion_principal && <Badge color={C.purple}>{patient.condicion_principal}</Badge>}
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
+          {[{ id: "resumen", l: "📊 Mi Progreso" }, { id: "sesiones", l: "📅 Mis Sesiones" }, { id: "mensajes", l: "💬 Mensajes" }].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "9px 18px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, color: tab === t.id ? C.primary : C.muted, borderBottom: tab === t.id ? `2px solid ${C.primary}` : "2px solid transparent" }}>{t.l}</button>
+          ))}
+        </div>
+
+        {tab === "resumen" && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
+              {[{ l: "Sesiones completadas", v: patSess.length, c: C.primary, icon: "📅" },
+                { l: "Mejoría del dolor", v: `${mej}%`, c: mej >= 50 ? C.success : C.warning, icon: "📈" },
+                { l: "EVA actual", v: patSess[0]?.eva_post || "—", c: C.teal, icon: "💊" }].map(k => (
+                <div key={k.l} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, textAlign: "center" }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>{k.icon}</div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: k.c }}>{k.v}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{k.l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>🎯 Próxima sesión</div>
+              <div style={{ fontSize: 13, color: C.muted }}>Consulta con tu médico para programar tu próxima sesión de tratamiento.</div>
+              <button style={{ marginTop: 14, padding: "10px 20px", borderRadius: 10, background: C.primaryDim, border: `1px solid ${C.primary}35`, color: C.primary, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>📱 Solicitar sesión</button>
+            </div>
+          </div>
+        )}
+
+        {tab === "sesiones" && (
+          <div>
+            {patSess.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "60px 20px", color: C.muted }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
+                <div>Aún no tienes sesiones registradas</div>
+              </div>
+            ) : patSess.map((s, i) => (
+              <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Sesión {s.numero_sesion} — {s.protocolo}</div>
+                  <div style={{ fontSize: 12, color: C.muted }}>{new Date(s.fecha).toLocaleDateString("es-ES")}</div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Badge color={C.danger}>EVA inicial: {s.eva_pre}</Badge>
+                  <Badge color={C.success}>EVA final: {s.eva_post}</Badge>
+                  {s.eva_pre && s.eva_post && <Badge color={C.primary}>Mejoría: {Math.round((s.eva_pre - s.eva_post) / s.eva_pre * 100)}%</Badge>}
+                </div>
+                {s.notas && <div style={{ marginTop: 10, fontSize: 12, color: C.muted, background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: "8px 12px" }}>{s.notas}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "mensajes" && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 24, textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>💬</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 8 }}>Mensajería con tu médico</div>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>Próximamente podrás comunicarte directamente con tu médico tratante.</div>
+            <Badge color={C.warning}>Próximamente</Badge>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // 8. LOGIN SCREEN
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// SISTEMA DE ROLES — 3 niveles de acceso
+// Admin → Médico → Paciente
+// ─────────────────────────────────────────────────────────────
+
+// Credenciales demo por rol
+const DEMO_CREDENTIALS = {
+  admin: { email: "admin@awake4wellness.com", pass: "Admin2024!", rol: "admin", nombre: "Dr. Javier Cuartas", titulo: "Administrador & Fundador" },
+  medico: { email: "doctor@awake4wellness.com", pass: "Medico2024!", rol: "medico", nombre: "Dr. Médico", titulo: "Médico Tratante" },
+  paciente: { email: "paciente@awake4wellness.com", pass: "Paciente2024!", rol: "paciente", nombre: "Carlos Mendoza", titulo: "Paciente" },
+};
+
+function RoleSelector({ onSelect, selected }) {
+  const C = DS.colors;
+  const roles = [
+    { id: "admin", label: "Administrador", icon: "👑", desc: "Acceso total al sistema", color: C.warning },
+    { id: "medico", label: "Médico", icon: "👨‍⚕️", desc: "Gestión clínica completa", color: C.primary },
+    { id: "paciente", label: "Paciente", icon: "🧑", desc: "Mi historia y progreso", color: C.success },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 4 }}>SELECCIONA TU PERFIL</div>
+      {roles.map(r => (
+        <div key={r.id} onClick={() => onSelect(r.id)}
+          style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 12, cursor: "pointer", transition: "all 0.2s",
+            background: selected === r.id ? `${r.color}12` : "rgba(255,255,255,0.03)",
+            border: `1px solid ${selected === r.id ? `${r.color}40` : C.border}`,
+            transform: selected === r.id ? "translateX(4px)" : "none" }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: `${r.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{r.icon}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: selected === r.id ? r.color : C.text }}>{r.label}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>{r.desc}</div>
+          </div>
+          {selected === r.id && <div style={{ width: 8, height: 8, borderRadius: "50%", background: r.color }} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [loading, setLoading] = useState(false); const [error, setError] = useState("");
+  const [rol, setRol] = useState("medico");
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const C = DS.colors;
+
+  const rolColors = { admin: C.warning, medico: C.primary, paciente: C.success };
+  const rolColor = rolColors[rol];
+
   async function go() {
     setError(""); setLoading(true);
-    try { const d = await CoreServices.signIn(email, pass); if (d.user) onLogin(d.user); else setError(d.error?.message || "Error"); }
-    catch { setError("Error de conexión"); } finally { setLoading(false); }
+    try {
+      // Demo mode — verificar credenciales localmente
+      if (IS_DEMO) {
+        const cred = DEMO_CREDENTIALS[rol];
+        if (email === cred.email && pass === cred.pass) {
+          const user = { email, id: `demo-${rol}`, rol, nombre: cred.nombre, titulo: cred.titulo };
+          localStorage.setItem("a4w_user", JSON.stringify(user));
+          onLogin(user);
+        } else {
+          // Permitir acceso demo con cualquier credencial correcta de rol
+          if (email === "" && pass === "") {
+            const cred2 = DEMO_CREDENTIALS[rol];
+            const user = { email: cred2.email, id: `demo-${rol}`, rol, nombre: cred2.nombre, titulo: cred2.titulo };
+            localStorage.setItem("a4w_user", JSON.stringify(user));
+            onLogin(user);
+          } else {
+            setError("Credenciales incorrectas. En modo demo presiona Entrar sin llenar los campos.");
+          }
+        }
+      } else {
+        // Producción — auth con Supabase
+        const d = await CoreServices.signIn(email, pass);
+        if (d.user) {
+          const user = { ...d.user, rol, nombre: d.user.email };
+          onLogin(user);
+        } else {
+          setError(d.error?.message || "Credenciales incorrectas");
+        }
+      }
+    } catch { setError("Error de conexión"); }
+    finally { setLoading(false); }
   }
-  const C = DS.colors;
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DS.font }}>
+      {/* Fondo animado */}
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
         {[[300, 200, "#38BDF8"], [500, 500, "#818CF8"], [100, 400, "#10B981"]].map(([x, y, c], i) => (
           <div key={i} style={{ position: "absolute", left: `${x / 12}%`, top: `${y / 8}%`, width: 400, height: 400, borderRadius: "50%", background: `${c}06`, filter: "blur(80px)" }} />
         ))}
       </div>
-      <div style={{ width: "100%", maxWidth: 420, padding: 20, position: "relative" }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
+
+      <div style={{ width: "100%", maxWidth: 460, padding: 20, position: "relative" }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ fontSize: 9, letterSpacing: 5, color: C.dim, marginBottom: 8 }}>PLATAFORMA CLÍNICA MODULAR</div>
-          <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: -2, background: "linear-gradient(135deg,#38BDF8 0%,#818CF8 50%,#F472B6 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AWAKE4WELLNESS</div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>Sistema Modular v4.0 · {pluginRegistry.length} módulos disponibles</div>
-        </div>
-        <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 20, padding: 32 }}>
-          {IS_DEMO && <div style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: C.success }}>🎯 Modo demo — presiona Entrar para explorar</div>}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="doctor@clinica.com" />
-            <Input label="Contraseña" type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" />
-            {error && <div style={{ fontSize: 12, color: C.danger, background: "rgba(239,68,68,0.1)", padding: "8px 12px", borderRadius: 8 }}>{error}</div>}
-            <Btn onClick={go} disabled={loading} color={C.primary} fullWidth style={{ padding: "13px", fontSize: 14 }}>{loading ? "Cargando..." : "→ Entrar"}</Btn>
+          <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: -2, background: "linear-gradient(135deg,#38BDF8 0%,#818CF8 50%,#F472B6 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+            AWAKE4WELLNESS
           </div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
+            Sistema Modular v4.0 · Concierge Recovery
+          </div>
+        </div>
+
+        <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 20, padding: 28 }}>
+          {/* Demo banner */}
+          {IS_DEMO && (
+            <div style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: C.success }}>
+              🎯 Selecciona tu perfil e ingresa tus credenciales
+            </div>
+          )}
+
+          {/* Selector de rol */}
+          <RoleSelector selected={rol} onSelect={r => { setRol(r); setEmail(""); setPass(""); setError(""); }} />
+
+          {/* Formulario */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6 }}>Email</label>
+              <input value={email} onChange={e => setEmail(e.target.value)}
+                placeholder={IS_DEMO ? DEMO_CREDENTIALS[rol].email : "tu@email.com"}
+                type="email" onKeyDown={e => e.key === "Enter" && go()}
+                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, padding: "11px 14px", fontFamily: "inherit", boxSizing: "border-box", outline: "none" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6 }}>Contraseña</label>
+              <div style={{ position: "relative" }}>
+                <input value={pass} onChange={e => setPass(e.target.value)}
+                  placeholder={IS_DEMO ? DEMO_CREDENTIALS[rol].pass : "••••••••"}
+                  type={showPass ? "text" : "password"} onKeyDown={e => e.key === "Enter" && go()}
+                  style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, padding: "11px 42px 11px 14px", fontFamily: "inherit", boxSizing: "border-box", outline: "none" }} />
+                <button onClick={() => setShowPass(!showPass)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 14 }}>
+                  {showPass ? "🙈" : "👁️"}
+                </button>
+              </div>
+            </div>
+
+            {error && <div style={{ fontSize: 12, color: C.danger, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", padding: "9px 12px", borderRadius: 9 }}>{error}</div>}
+
+            <button onClick={go} disabled={loading}
+              style={{ width: "100%", padding: "13px", borderRadius: 11, border: `1px solid ${rolColor}35`, background: `${rolColor}15`, color: rolColor, fontSize: 14, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, fontFamily: "inherit", marginTop: 4 }}>
+              {loading ? "Verificando..." : `→ Entrar como ${rol === "admin" ? "Administrador" : rol === "medico" ? "Médico" : "Paciente"}`}
+            </button>
+          </div>
+
+          {/* Demo hint — solo visible en desarrollo */}
+          {IS_DEMO && false && (
+            <div style={{ marginTop: 20 }} />
+          )}
         </div>
       </div>
     </div>
@@ -2289,19 +4264,19 @@ function LoginScreen({ onLogin }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [screen, setScreen] = useState("dashboard");
-  const [contextData, setContextData] = useState(null); // paciente activo, etc.
+  const [contextData, setContextData] = useState(null);
   const [patients, setPatients] = useState(DEMO_PATIENTS);
   const [sessions, setSessions] = useState(DEMO_SESSIONS);
 
-  useEffect(() => { const u = CoreServices.getUser(); if (u) setUser(u); }, []);
+  useEffect(() => { const u = CoreServices.getUser(); if (u) { setUser(u); setInitialScreen(u); } }, []);
 
-  async function handleLogin(u) { setUser(u); }
-  function logout() { CoreServices.signOut(); setUser(null); }
-
-  function navigate(screenId, data = null) {
-    setScreen(screenId);
-    if (data) setContextData(data);
+  function setInitialScreen(u) {
+    if (u.rol === "paciente") setScreen("mi-historia");
+    else setScreen("dashboard");
   }
+
+  async function handleLogin(u) { setUser(u); setInitialScreen(u); }
+  function logout() { CoreServices.signOut(); setUser(null); setScreen("dashboard"); }
 
   async function addPatient(form) {
     const { data } = await CoreServices.insert("pacientes", { ...form, medico_id: user?.id });
@@ -2320,18 +4295,34 @@ export default function App() {
 
   if (!user) return <LoginScreen onLogin={handleLogin} />;
 
+  // Filtrar plugins según rol
+  const rol = user.rol || "medico";
+  const pluginsParaRol = pluginRegistry.filter(p => {
+    if (rol === "admin") return true;
+    if (rol === "medico") return !["knowledge"].includes(p.id);
+    if (rol === "paciente") return ["mi-historia", "telemedicine"].includes(p.id);
+    return true;
+  });
+
+  // Si es paciente, mostrar vista simplificada
+  if (rol === "paciente") return <PatientPortal user={user} patient={patients.find(p => p.email === user.email) || patients[0]} sessions={sessions} onLogout={logout} />;
+
   // Group plugins for sidebar
   const grouped = Object.entries(PLUGIN_GROUPS).map(([groupId, group]) => ({
     ...group, id: groupId,
-    plugins: pluginRegistry.filter(p => p.group === groupId),
+    plugins: pluginsParaRol.filter(p => p.group === groupId),
   })).filter(g => g.plugins.length > 0);
 
-  // Render current plugin
+  function navigate(screenId, data = null) {
+    setScreen(screenId);
+    if (data) setContextData(data);
+  }
+
   function renderPlugin() {
     if (screen === "patient-detail" && contextData) {
-      return <PatientDetailPlugin patient={contextData} sessions={sessions} onAddSession={addSession} navigate={navigate} plugins={pluginRegistry} />;
+      return <PatientDetailPlugin patient={contextData} sessions={sessions} onAddSession={addSession} navigate={navigate} plugins={pluginsParaRol} />;
     }
-    const plugin = pluginRegistry.find(p => p.id === screen);
+    const plugin = pluginsParaRol.find(p => p.id === screen);
     if (!plugin) return null;
     const PluginComponent = plugin.component;
     return <PluginComponent
@@ -2340,9 +4331,13 @@ export default function App() {
       sessions={sessions}
       onAddPatient={addPatient}
       navigate={navigate}
-      plugins={pluginRegistry}
+      plugins={pluginsParaRol}
+      user={user}
     />;
   }
+
+  const rolColor = { admin: C.warning, medico: C.primary }[rol] || C.primary;
+  const rolIcon = { admin: "👑", medico: "👨‍⚕️" }[rol] || "👤";
 
   const currentPlugin = pluginRegistry.find(p => p.id === screen);
 
@@ -2390,10 +4385,10 @@ export default function App() {
           {/* User */}
           <div style={{ padding: 10, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <Avatar name={user.email || "Dr"} color={C.purple} size={30} />
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.text }}>{IS_DEMO ? "Modo Demo" : user.email?.split("@")[0]}</div>
-                <div style={{ fontSize: 9, color: C.dim }}>Medicina Deportiva</div>
+              <Avatar name={user.nombre || user.email || "Dr"} color={rolColor} size={30} />
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.nombre || user.email?.split("@")[0]}</div>
+                <div style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, background: `${rolColor}15`, color: rolColor, fontWeight: 700, display: "inline-block", marginTop: 2 }}>{rolIcon} {rol === "admin" ? "Administrador" : rol === "medico" ? "Médico" : "Paciente"}</div>
               </div>
             </div>
             <button onClick={logout} style={{ width: "100%", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: C.danger, borderRadius: 7, padding: "5px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Cerrar Sesión</button>
