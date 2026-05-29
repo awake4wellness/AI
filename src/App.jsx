@@ -231,10 +231,24 @@ export const CoreServices = {
       await new Promise(res => { const iv = setInterval(() => { i = Math.min(i + 4, demo.length); onChunk && onChunk(demo.slice(0, i)); if (i >= demo.length) { clearInterval(iv); res(); } }, 16); });
       return demo;
     }
-    const res = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_KEY}` }, body: JSON.stringify({ model: "gpt-4o", stream: true, max_tokens: 1200, temperature: 0.3, messages: [{ role: "system", content: systemPrompt }, ...messages] }) });
-    if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-    const reader = res.body.getReader(); const dec = new TextDecoder(); let full = "";
-    while (true) { const { done, value } = await reader.read(); if (done) break; const lines = dec.decode(value).split("\n").filter(l => l.startsWith("data: ") && !l.includes("[DONE]")); for (const l of lines) { try { const d = JSON.parse(l.slice(6)); const t = d.choices?.[0]?.delta?.content || ""; if (t) { full += t; onChunk && onChunk(full); } } catch {} } }
+    const res = await fetch("/api/chat", {
+
+      method: "POST",
+
+      headers: { "Content-Type": "application/json" },
+
+      body: JSON.stringify({ messages, system: systemPrompt }),
+
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+
+    const full = data.text || "";
+
+    onChunk && onChunk(full);
+
     return full;
   },
 };
