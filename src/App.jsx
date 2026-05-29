@@ -224,19 +224,13 @@ export const CoreServices = {
   },
 
   // AI
-  async askAI(messages, systemPrompt, onChunk) {
-    if (AI_DEMO) {
-      const demo = `Basándome en el contexto clínico disponible:\n\n**Análisis:**\nEl progreso del paciente es positivo con reducción sostenida del dolor.\n\n**Recomendaciones:**\n- Mantener protocolo HILT actual\n- Crioterapia post-sesión indicada (TSI hipertérmico)\n- Reevaluar en próxima sesión\n\n*Activa tu OpenAI API key para respuestas en tiempo real.*`;
-      let i = 0;
-      await new Promise(res => { const iv = setInterval(() => { i = Math.min(i + 4, demo.length); onChunk && onChunk(demo.slice(0, i)); if (i >= demo.length) { clearInterval(iv); res(); } }, 16); });
-      return demo;
-    }
-    const res = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_KEY}` }, body: JSON.stringify({ model: "gpt-4o", stream: true, max_tokens: 1200, temperature: 0.3, messages: [{ role: "system", content: systemPrompt }, ...messages] }) });
-    if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-    const reader = res.body.getReader(); const dec = new TextDecoder(); let full = "";
-    while (true) { const { done, value } = await reader.read(); if (done) break; const lines = dec.decode(value).split("\n").filter(l => l.startsWith("data: ") && !l.includes("[DONE]")); for (const l of lines) { try { const d = JSON.parse(l.slice(6)); const t = d.choices?.[0]?.delta?.content || ""; if (t) { full += t; onChunk && onChunk(full); } } catch {} } }
-    return full;
-  },
+async askAI(messages, systemPrompt, onChunk) {
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "gpt-4o", stream: true, max_tokens: 1200, temperature: 0.3, messages: [{ role: "system", content: systemPrompt }, ...messages] }) });
+      if (!res.ok) throw new Error(`OpenAI ${res.status}`);
+      const reader = res.body.getReader(); const dec = new TextDecoder(); let full = "";
+      while (true) { const { done, value } = await reader.read(); if (done) break; const lines = dec.decode(value).split("\n").filter(l => l.startsWith("data: ") && !l.includes("[DONE]")); for (const l of lines) { try { const d = JSON.parse(l.slice(6)); const t = d.choices?.[0]?.delta?.content || ""; if (t) { full += t; onChunk && onChunk(full); } } catch {} } }
+      return full;
+    },
 };
 
 // ─────────────────────────────────────────────────────────────
