@@ -179,7 +179,6 @@ export function Btn({ children, onClick, color = DS.colors.primary, disabled = f
 // ─────────────────────────────────────────────────────────────
 const SUPABASE_URL = "TU_SUPABASE_URL_AQUI";
 const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY_AQUI";
-const OPENAI_KEY   = process.env.REACT_APP_OPENAI_KEY || "TU_OPENAI_API_KEY_AQUI";
 const IS_DEMO      = SUPABASE_URL.includes("TU_");
 const AI_DEMO      = false; // API key viene de variable de entorno en Vercel
 
@@ -232,23 +231,14 @@ export const CoreServices = {
       return demo;
     }
     const res = await fetch("/api/chat", {
-
       method: "POST",
-
       headers: { "Content-Type": "application/json" },
-
       body: JSON.stringify({ messages, system: systemPrompt }),
-
     });
-
     const data = await res.json();
-
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-
     const full = data.text || "";
-
     onChunk && onChunk(full);
-
     return full;
   },
 };
@@ -548,20 +538,18 @@ function useSpeechRecognition() {
 }
 
 async function analizarConsultaIA(transcript, patient) {
-  const prompt = `Eres un asistente médico clínico de Awake4Wellness especializado en medicina deportiva y recuperación.
+  const systemPrompt = `Eres Alex, el asistente clínico de Awake4Wellness, especializado en medicina deportiva y recuperación. Extraes información estructurada de la transcripción de una consulta médica. NO inventas datos: solo llenas un campo si la transcripción lo menciona. Respondes ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.`;
 
-Analiza la siguiente transcripción de consulta médica y extrae la información estructurada.
-
-PACIENTE: ${patient?.nombre || "No especificado"} ${patient?.apellido || ""}, ${patient?.edad || "?"} años
+  const userMsg = `PACIENTE: ${patient?.nombre || "No especificado"} ${patient?.apellido || ""}, ${patient?.edad || "?"} años
 CONDICIÓN: ${patient?.condicion_principal || "No especificada"}
 
 TRANSCRIPCIÓN DE LA CONSULTA:
 "${transcript}"
 
-Responde ÚNICAMENTE en JSON válido con esta estructura exacta:
+Devuelve exactamente esta estructura JSON:
 {
-  "motivo": "motivo principal de consulta extraído",
-  "eva": número del 1 al 10 o null si no se menciona,
+  "motivo": "motivo principal de consulta",
+  "eva": número del 1 al 10 o null,
   "localizacion": "localización del dolor o síntoma",
   "inicio": "cuándo inició el problema",
   "evolucion": "cómo ha evolucionado",
@@ -570,42 +558,17 @@ Responde ÚNICAMENTE en JSON válido con esta estructura exacta:
   "trat_previos": "tratamientos previos mencionados",
   "dx_principal": "diagnóstico presuntivo principal",
   "plan": "plan de tratamiento mencionado",
-  "nota_soap": {
-    "subjetivo": "lo que refiere el paciente",
-    "objetivo": "hallazgos objetivos mencionados",
-    "analisis": "análisis clínico",
-    "plan": "plan de manejo"
-  },
-  "alertas": ["lista de alertas o red flags identificadas"],
-  "resumen": "resumen ejecutivo de la consulta en 2-3 oraciones"
+  "nota_soap": { "subjetivo": "", "objetivo": "", "analisis": "", "plan": "" },
+  "alertas": ["red flags o alertas identificadas"],
+  "resumen": "resumen ejecutivo en 2-3 oraciones"
 }`;
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1500,
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
-    const data = await res.json();
-    const text = data.content?.[0]?.text || "";
-    const clean = text.replace(/```json|```/g, "").trim();
+    const text = await CoreServices.askAI([{ role: "user", content: userMsg }], systemPrompt);
+    const clean = (text || "").replace(/```json|```/g, "").trim();
     return JSON.parse(clean);
   } catch {
-    // Fallback si falla la API de Anthropic — usar OpenAI
-    try {
-      const res2 = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_KEY}` },
-        body: JSON.stringify({ model: "gpt-4o", max_tokens: 1500, temperature: 0.1, messages: [{ role: "user", content: prompt }] })
-      });
-      const d2 = await res2.json();
-      const t2 = d2.choices?.[0]?.message?.content || "{}";
-      return JSON.parse(t2.replace(/```json|```/g, "").trim());
-    } catch { return null; }
+    return null;
   }
 }
 
@@ -1543,39 +1506,31 @@ function FLIRPlugin({ patient }) {
     setAnalyzing(true);
     setAnalisisIA(null);
     try {
-      const prompt = `Eres el Dr. Javier Cuartas de Awake4Wellness, especialista en termografía clínica.
-Analiza esta imagen termográfica clínica y proporciona un análisis detallado.
+      const systemPrompt = `Eres Alex, asistente clínico de Awake4Wellness, especialista en termografía (Dr. Javier Cuartas). Respondes ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.`;
+      const userMsg = `Analiza esta imagen termográfica clínica.
 
-DATOS DE LA IMAGEN:
+DATOS:
 - Paciente: ${patient?.nombre || "Paciente"} ${patient?.apellido || ""}
-- Zona evaluada: ${img.zona}
-- TSI reportado: ${img.tsi}
-- Asimetría térmica: Δ${img.asimetria}°C
-- Sesión: ${img.sesion}
-- Fecha: ${img.fecha}
+- Zona: ${img.zona}
+- TSI: ${img.tsi}
+- Asimetría: Δ${img.asimetria}°C
+- Sesión: ${img.sesion} · Fecha: ${img.fecha}
 - Protocolo previo: ${img.protocolo}
 
-Responde en JSON:
+Devuelve este JSON:
 {
   "diagnostico": "diagnóstico termográfico principal",
   "nivel_alarma": "L1/L2/L3",
-  "inflamacion": "descripción del estado inflamatorio",
+  "inflamacion": "estado inflamatorio",
   "crioterapia": true/false,
   "hilt": true/false,
   "urgencia": "normal/moderada/alta",
-  "recomendaciones": ["recomendación 1", "recomendación 2", "recomendación 3"],
-  "progreso": "evaluación del progreso si hay sesiones anteriores",
-  "siguiente_sesion": "indicaciones para la próxima sesión"
+  "recomendaciones": ["rec 1", "rec 2", "rec 3"],
+  "progreso": "evaluación del progreso",
+  "siguiente_sesion": "indicaciones próxima sesión"
 }`;
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, messages: [{ role: "user", content: prompt }] })
-      });
-      const data = await res.json();
-      const text = data.content?.[0]?.text || "{}";
-      setAnalisisIA(JSON.parse(text.replace(/```json|```/g, "").trim()));
+      const text = await CoreServices.askAI([{ role: "user", content: userMsg }], systemPrompt);
+      setAnalisisIA(JSON.parse((text || "{}").replace(/```json|```/g, "").trim()));
     } catch {
       setAnalisisIA({
         diagnostico: `Asimetría térmica Δ${img.asimetria}°C en ${img.zona} — ${img.tsi}`,
@@ -2029,34 +1984,21 @@ function KnowledgeBasePlugin({ user }) {
     setSearching(true);
     setSearchResults([]);
     try {
-      const prompt = `Eres el sistema de búsqueda de la base de conocimiento de Awake4Wellness.
-El usuario busca: "${query}"
+      const systemPrompt = `Eres el sistema de búsqueda de la base de conocimiento de Awake4Wellness. Respondes ÚNICAMENTE con un array JSON válido, sin markdown ni texto adicional.`;
+      const userMsg = `El usuario busca: "${query}"
 
-Simula resultados de búsqueda en estos libros disponibles:
-${docs.map(d => `- ${d.titulo} (${d.autor}): temas: ${d.temas.join(", ")}`).join("\n")}
+Libros disponibles:
+${docs.map(d => `- ${d.titulo} (${d.autor}): ${d.temas.join(", ")}`).join("\n")}
 
-Responde en JSON con los 3 resultados más relevantes:
+Devuelve los 3 resultados más relevantes:
 [
-  {
-    "libro": "título del libro",
-    "pagina": número de página estimado,
-    "relevancia": "alta/media",
-    "fragmento": "texto relevante simulado de 2-3 oraciones que respondería la consulta",
-    "contexto": "capítulo o sección donde se encontraría"
-  }
+  { "libro": "título", "pagina": número, "relevancia": "alta/media", "fragmento": "texto de 2-3 oraciones", "contexto": "capítulo o sección" }
 ]`;
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, messages: [{ role: "user", content: prompt }] })
-      });
-      const data = await res.json();
-      const text = data.content?.[0]?.text || "[]";
-      setSearchResults(JSON.parse(text.replace(/```json|```/g, "").trim()));
+      const text = await CoreServices.askAI([{ role: "user", content: userMsg }], systemPrompt);
+      setSearchResults(JSON.parse((text || "[]").replace(/```json|```/g, "").trim()));
     } catch {
       setSearchResults([
-        { libro: "Netter's Sports Medicine", pagina: 234, relevancia: "alta", fragmento: `Resultado simulado para: "${query}". Los desgarros musculares se clasifican según extensión...`, contexto: "Capítulo 12 — Lesiones Musculares" },
+        { libro: "Netter's Sports Medicine", pagina: 234, relevancia: "alta", fragmento: `Resultado para: "${query}". Los desgarros musculares se clasifican según extensión...`, contexto: "Capítulo 12 — Lesiones Musculares" },
         { libro: "Killer Practical Manual", pagina: 45, relevancia: "media", fragmento: `En el protocolo AW4W para "${query}", se recomienda iniciar con fase antiinflamatoria...`, contexto: "Sección 3 — Protocolos de Tratamiento" },
       ]);
     } finally { setSearching(false); }
@@ -3297,28 +3239,22 @@ function PrescriptionsPlugin({ patient, C: Cprop }) {
   async function generarConIA() {
     setGenerating(true);
     try {
-      const prompt = `Eres el Dr. Javier Cuartas de Awake4Wellness. Genera instrucciones personalizadas para este paciente en español. Responde SOLO en JSON válido:
+      const systemPrompt = `Eres Alex, asistente clínico de Awake4Wellness (Dr. Javier Cuartas). Generas instrucciones personalizadas para el paciente en español. Respondes ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.`;
+      const userMsg = `PACIENTE: ${patient?.nombre || "Paciente"} ${patient?.apellido || ""}, ${patient?.edad || "?"} años
+CONDICIÓN: ${patient?.condicion_principal || "No especificada"}
+PROTOCOLO: ${selected?.nombre}
+
+Devuelve este JSON:
 {
-  "saludo": "mensaje personalizado de bienvenida",
-  "objetivo": "objetivo específico para este paciente",
+  "saludo": "bienvenida personalizada",
+  "objetivo": "objetivo específico",
   "instrucciones_especiales": ["instrucción 1", "instrucción 2", "instrucción 3"],
   "señales_alarma": ["señal 1", "señal 2"],
-  "mensaje_motivacional": "mensaje motivacional en 2 oraciones",
+  "mensaje_motivacional": "mensaje en 2 oraciones",
   "pronostico": "pronóstico realista en 1-2 oraciones"
-}
-
-PACIENTE: ${patient?.nombre || "Paciente"} ${patient?.apellido || ""}, ${patient?.edad || "?"} años
-CONDICIÓN: ${patient?.condicion_principal || "No especificada"}
-PROTOCOLO: ${selected?.nombre}`;
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] })
-      });
-      const data = await res.json();
-      const text = data.content?.[0]?.text || "{}";
-      setCustomConfig(JSON.parse(text.replace(/```json|```/g, "").trim()));
+}`;
+      const text = await CoreServices.askAI([{ role: "user", content: userMsg }], systemPrompt);
+      setCustomConfig(JSON.parse((text || "{}").replace(/```json|```/g, "").trim()));
       setStep("preview");
     } catch {
       setCustomConfig({
