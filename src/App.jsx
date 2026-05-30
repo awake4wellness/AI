@@ -2298,7 +2298,7 @@ Devuelve los 3 resultados más relevantes:
 function CopilotPlugin({ patient, user }) { 
   const { C } = useApp();
   const { hc } = useClinicalRecord(patient);
-    
+    const rol = user?.rol || "medico";
 
   const systemPrompt = `Eres Alex, el copiloto clínico IA de AWAKE4WELLNESS — Dr. Javier Cuartas.
 Expertise: termografía (ThermoHuman, TRI/TSI), ecografía musculoesquelética, HILT (1064nm Nd:YAG), crioterapia (-21°C), acupuntura, biorresonancia, rehabilitación progresiva, VALD, InBody, Bodygee, Garmin.
