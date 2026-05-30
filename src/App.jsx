@@ -324,14 +324,14 @@ export const CoreServices = {
     const token = this.getToken();
     const params = Object.entries(filters).map(([k, v]) => `${k}=eq.${v}`).join("&");
     const url = `${SUPABASE_URL}/rest/v1/${table}?select=${cols}${params ? "&" + params : ""}`;
-    const r = await fetch(url, { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` } });
+    const r = await fetch(url, { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}` } });
     const d = await r.json();
     return { data: Array.isArray(d) ? d : [], error: d.error || null };
   },
   async insert(table, body) {
     if (IS_DEMO) return { data: [{ ...body, id: Date.now().toString() }], error: null };
     const token = this.getToken();
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Prefer": "return=representation" }, body: JSON.stringify(Array.isArray(body) ? body : [body]) });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Prefer": "return=representation" }, body: JSON.stringify(Array.isArray(body) ? body : [body]) });
     const d = await r.json();
     return { data: d, error: d.error || null };
   },
@@ -340,7 +340,7 @@ export const CoreServices = {
   async uploadFile(bucket, path, file) {
     if (IS_DEMO) return { url: URL.createObjectURL(file), error: null };
     const token = this.getToken();
-    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, { method: "POST", headers: { "Authorization": `Bearer ${token}`, "apikey": SUPABASE_KEY }, body: file });
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, { method: "POST", headers: { "Authorization": `Bearer ${token || SUPABASE_KEY}`, "apikey": SUPABASE_KEY }, body: file });
     const d = await r.json();
     return { url: `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`, error: d.error || null };
   },
