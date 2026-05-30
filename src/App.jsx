@@ -51,6 +51,68 @@ function createEmptyHc(patient = {}) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// BLOQUE 3/5 · buildContext — resume la Historia Clínica para la IA
+// Función pura: NO modifica nada. Solo lee la HC y devuelve un texto
+// compacto. Por ahora NADIE la usa todavía (eso será el Bloque 4).
+// ═══════════════════════════════════════════════════════════════
+function buildContext(hc = {}, patient = {}) {
+  const lineas = [];
+  const add = (etiqueta, valor) => {
+    if (valor === null || valor === undefined) return;
+    let v = valor;
+    if (Array.isArray(v)) v = v.filter(Boolean).join(", ");
+    v = String(v).trim();
+    if (v === "" || v === "0") return;
+    lineas.push(`- ${etiqueta}: ${v}`);
+  };
+
+  // Identificación
+  add("Nombre", hc.nombre || [patient.nombre, patient.apellido].filter(Boolean).join(" "));
+  add("Edad", hc.edad || patient.edad);
+  add("Sexo", hc.sexo);
+  add("Ocupación", hc.ocupacion);
+  add("Deporte", hc.deporte);
+  add("Nivel de actividad", hc.nivel_actividad || patient.nivel_actividad);
+
+  // Motivo y dolor
+  add("Motivo de consulta", hc.motivo);
+  add("Dolor (EVA 0-10)", hc.eva);
+  add("Tipo de dolor", hc.tipo_dolor);
+  add("Localización", hc.localizacion);
+  add("Patrón", hc.patron);
+  add("Irradiación", hc.irradiacion);
+  add("Inicio", hc.inicio);
+  add("Evolución", hc.evolucion);
+  add("Agravantes", hc.agravantes);
+  add("Aliviantes", hc.aliviantes);
+
+  // Antecedentes
+  add("Tratamientos previos", hc.trat_previos);
+  add("Estudios previos", hc.estudios_previos);
+  add("Antecedentes médicos", hc.ant_medicos);
+  add("Antecedentes quirúrgicos", hc.ant_quirurgicos);
+  add("Antecedentes de trauma", hc.ant_trauma);
+  add("Alergias", hc.alergias);
+  add("Medicamentos", hc.medicamentos);
+  add("Antecedentes deportivos", hc.ant_deportivos);
+
+  // Diagnóstico por capas
+  if (hc.dx_estructural) add("Dx estructural", `${hc.dx_estructural}${hc.grado_estructural ? " (grado " + hc.grado_estructural + ")" : ""}`);
+  if (hc.dx_funcional)   add("Dx funcional",   `${hc.dx_funcional}${hc.grado_funcional ? " (grado " + hc.grado_funcional + ")" : ""}`);
+  if (hc.dx_sistemica)   add("Dx sistémica",   `${hc.dx_sistemica}${hc.grado_sistemica ? " (grado " + hc.grado_sistemica + ")" : ""}`);
+  if (hc.dx_neurologica) add("Dx neurológica", `${hc.dx_neurologica}${hc.grado_neurologica ? " (grado " + hc.grado_neurologica + ")" : ""}`);
+
+  // Plan y notas
+  add("Plan", hc.plan);
+  add("Notas", hc.notas);
+  add("Seguimiento", hc.seguimiento);
+
+  if (lineas.length === 0) {
+    return "HISTORIA CLÍNICA DEL PACIENTE: (sin datos registrados todavía)";
+  }
+  return "HISTORIA CLÍNICA DEL PACIENTE:\n" + lineas.join("\n");
+}
 // Hook por paciente: devuelve { hc, update, set }
 function useClinicalRecord(patient) {
   const patientId = patient?.id || "sin-paciente";
