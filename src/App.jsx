@@ -299,8 +299,8 @@ export function Btn({ children, onClick, color = DS.colors.primary, disabled = f
 // ─────────────────────────────────────────────────────────────
 // 3. CORE SERVICES (auth, db, ai — nunca cambian)
 // ─────────────────────────────────────────────────────────────
-const SUPABASE_URL = "TU_SUPABASE_URL_AQUI";
-const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY_AQUI";
+const SUPABASE_URL = "https://paizrpynckjgedbvjyqy.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhaXpycHluY2tqZ2VkYnZqeXF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNDUyNzEsImV4cCI6MjA5NTcyMTI3MX0.CkSRdZt93-LN9EbFqT3PXeZjGaxgWVlalV5hecPJwOY";
 const IS_DEMO      = SUPABASE_URL.includes("TU_");
 const AI_DEMO      = false; // API key viene de variable de entorno en Vercel
 
@@ -2299,7 +2299,7 @@ Devuelve los 3 resultados más relevantes:
 function CopilotPlugin({ patient, user }) { 
   const { C } = useApp();
   const rol = user?.rol || "medico";
-  const { hc } = useClinicalRecord(patient);
+  (patient);
     
 
   const systemPrompt = `Eres Alex, el copiloto clínico IA de AWAKE4WELLNESS — Dr. Javier Cuartas.
