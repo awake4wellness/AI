@@ -1,7 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // AWAKE4WELLNESS — ARQUITECTURA MODULAR v4.0
-// Sistema de plugins: agrega integraciones sin tocar el core
-//
+f//
 // CÓMO AGREGAR UN NUEVO MÓDULO:
 // 1. Crear archivo: src/plugins/MiDispositivo.plugin.jsx
 // 2. Exportar objeto con la estructura PluginDefinition
@@ -12,8 +11,69 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, createContext, useContext } from "react";
+// ═══════════════════════════════════════════════════════════════
+// BLOQUE 1/5 · Store compartido de Historia Clínica (Awake4Wellness)
+// Versión "se cuelga sola": NO hay que envolver nada en la app.
+// Usa useState y useEffect, que tu archivo ya importa (línea 13).
+// ═══════════════════════════════════════════════════════════════
 
-// ─────────────────────────────────────────────────────────────
+// --- Una sola "pizarra" en memoria para toda la app ---
+const _hcStore = {};          // { [patientId]: hc }
+const _hcSubs = new Set();    // avisa a los componentes cuando algo cambia
+function _hcEmit() { _hcSubs.forEach((fn) => fn()); }
+
+// Estado inicial vacío de una HC. Ajusta/añade campos según tu HistoriaClinicaV3.
+function createEmptyHc(patient = {}) {
+  return {
+    // Datos
+    nombre: [patient.nombre, patient.apellido].filter(Boolean).join(" "),
+    edad: patient.edad || "", sexo: "", documento: "", telefono: "",
+    email: patient.email || "", ocupacion: "", deporte: "",
+    nivel_actividad: patient.nivel_actividad || "",
+    fecha_nacimiento: "", fecha_consulta: new Date().toLocaleDateString("es-ES"),
+    // Motivo / dolor
+    motivo: "", eva: 0, tipo_dolor: [], localizacion: "", patron: "", irradiacion: "",
+    // Enfermedad actual
+    inicio: "", evolucion: "", agravantes: "", aliviantes: "",
+    trat_previos: "", estudios_previos: "",
+    // Antecedentes + Killer Practical
+    ant_medicos: "", ant_quirurgicos: "", ant_trauma: "", alergias: "",
+    medicamentos: "", ant_deportivos: "", lesiones_sospecha: {},
+    // Tecnología (termografía / eco)
+    termografia: {},
+    // Diagnóstico 4 capas
+    dx_estructural: "", grado_estructural: "",
+    dx_funcional: "",  grado_funcional: "",
+    dx_sistemica: "",  grado_sistemica: "",
+    dx_neurologica: "", grado_neurologica: "",
+    // Plan y seguimiento
+    plan: "", notas: "", seguimiento: "",
+  };
+}
+
+// Hook por paciente: devuelve { hc, update, set }
+function useClinicalRecord(patient) {
+  const patientId = patient?.id || "sin-paciente";
+  const [, _tick] = useState(0);
+  useEffect(() => {
+    const fn = () => _tick((n) => n + 1);
+    _hcSubs.add(fn);
+    return () => _hcSubs.delete(fn);
+  }, []);
+  const hc = _hcStore[patientId] || createEmptyHc(patient);
+  return {
+    hc,
+    update: (partial) => {
+      _hcStore[patientId] = { ...(_hcStore[patientId] || createEmptyHc(patient)), ...partial };
+      _hcEmit();
+    },
+    set: (full) => {
+      _hcStore[patientId] = full;
+      _hcEmit();
+    },
+  };
+}
+
 // 1. DESIGN SYSTEM (tokens compartidos por todos los plugins)
 // ─────────────────────────────────────────────────────────────
 export const DS = {
