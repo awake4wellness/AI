@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // AWAKE4WELLNESS — ARQUITECTURA MODULAR v4.0
-f//
+//
 // CÓMO AGREGAR UN NUEVO MÓDULO:
 // 1. Crear archivo: src/plugins/MiDispositivo.plugin.jsx
 // 2. Exportar objeto con la estructura PluginDefinition
@@ -2298,6 +2298,7 @@ Devuelve los 3 resultados más relevantes:
 function CopilotPlugin({ patient, user }) { 
   const { C } = useApp();
   const rol = user?.rol || "medico";
+  const { hc } = useClinicalRecord(patient);
     
 
   const systemPrompt = `Eres Alex, el copiloto clínico IA de AWAKE4WELLNESS — Dr. Javier Cuartas.
