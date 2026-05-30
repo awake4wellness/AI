@@ -921,6 +921,7 @@ function HistoriaClinicaV3({ patient, C }) {
     { id: "s10", label: "📈 Seguimiento" },
   ];
 
+     const { set: publicarHc } = useClinicalRecord(patient);
      useEffect(() => { publicarHc(hc); }, [hc]);
 
      function autoFillFromVoice(data) {
