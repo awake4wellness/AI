@@ -493,6 +493,22 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
   const FORM_INIT = { nombre: "", apellido: "", fecha_nacimiento: "", edad: "", sexo: "", telefono: "", email: "", condicion_principal: "", deporte: "", nivel_actividad: "Moderado" };
   const [form, setForm] = useState(FORM_INIT);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const [alexText, setAlexText] = useState("");
+  const [alexLoading, setAlexLoading] = useState(false);
+  const [alexError, setAlexError] = useState("");
+  async function rellenarConAlex() {
+    if (!alexText.trim()) return;
+    setAlexLoading(true); setAlexError("");
+    try {
+      const systemPrompt = `Eres Alex, asistente clínico de Awake4Wellness. Extraes datos de un paciente desde un texto libre. Respondes ÚNICAMENTE con JSON válido, sin markdown. Solo incluye un campo si el texto lo menciona.`;
+      const userMsg = `Texto: "${alexText}"\n\nDevuelve este JSON:\n{"nombre":"","apellido":"","edad":"","sexo":"Masculino|Femenino|Otro","telefono":"","email":"","condicion_principal":"","deporte":"","nivel_actividad":"Sedentario|Leve|Moderado|Activo|Atleta"}`;
+      const text = await CoreServices.askAI([{ role: "user", content: userMsg }], systemPrompt);
+      const data = JSON.parse((text || "{}").replace(/```json|```/g, "").trim());
+      setForm(p => ({ ...p, nombre: data.nombre || p.nombre, apellido: data.apellido || p.apellido, edad: data.edad || p.edad, sexo: data.sexo || p.sexo, telefono: data.telefono || p.telefono, email: data.email || p.email, condicion_principal: data.condicion_principal || p.condicion_principal, deporte: data.deporte || p.deporte, nivel_actividad: data.nivel_actividad || p.nivel_actividad }));
+    } catch (e) {
+      setAlexError("Alex no pudo procesar el texto. Puede que la IA aún no esté conectada.");
+    } finally { setAlexLoading(false); }
+  }
 
   const filtered = patients.filter(p => `${p.nombre} ${p.apellido} ${p.condicion_principal}`.toLowerCase().includes(search.toLowerCase()));
 
@@ -550,6 +566,18 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
       </div>
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title="Nuevo Paciente" width={620}>
+        <div style={{ background: "rgba(16,185,129,0.06)", border: `1px solid ${C.success}30`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 16 }}>🧠</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.success }}>Alex te ayuda a llenar</span>
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Escribe en una frase los datos del paciente y Alex los reparte en el formulario.</div>
+          <textarea value={alexText} onChange={e => setAlexText(e.target.value)} placeholder="Ej: Carlos Mendoza, 34 años, hombre, tendinopatía rotuliana, juega tenis" rows={2} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
+          {alexError && <div style={{ fontSize: 11, color: C.danger, marginBottom: 8 }}>{alexError}</div>}
+          <Btn onClick={rellenarConAlex} disabled={alexLoading || !alexText.trim()} color={C.success} fullWidth>
+            {alexLoading ? "🧠 Alex está leyendo..." : "✨ Rellenar con Alex"}
+          </Btn>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
           <Input label="Nombre" value={form.nombre} onChange={e => upd("nombre", e.target.value)} placeholder="Carlos" />
