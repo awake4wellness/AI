@@ -921,7 +921,6 @@ function HistoriaClinicaV3({ patient, C }) {
     { id: "s10", label: "📈 Seguimiento" },
   ];
 
-  const { set: publicarHc } = useClinicalRecord(patient);
      useEffect(() => { publicarHc(hc); }, [hc]);
 
      function autoFillFromVoice(data) {
@@ -2299,6 +2298,7 @@ Devuelve los 3 resultados más relevantes:
 function CopilotPlugin({ patient, user }) { 
   const { C } = useApp();
   const rol = user?.rol || "medico";
+    
 
   const systemPrompt = `Eres Alex, el copiloto clínico IA de AWAKE4WELLNESS — Dr. Javier Cuartas.
 Expertise: termografía (ThermoHuman, TRI/TSI), ecografía musculoesquelética, HILT (1064nm Nd:YAG), crioterapia (-21°C), acupuntura, biorresonancia, rehabilitación progresiva, VALD, InBody, Bodygee, Garmin.
@@ -2320,7 +2320,11 @@ ${rol === "admin" ? `- Eres el ADMINISTRADOR. Puedes citar las fuentes específi
 - Responde con el conocimiento integrado de forma natural y profesional.
 - Solo da la respuesta clínica directa sin citar fuentes.`}
 
-Responde en español clínico profesional y conciso.`;
+${buildContext(hc, patient)}
+
+   ${buildContext(hc, patient)}
+
+   Responde en español clínico profesional y conciso.`;
   const [msgs, setMsgs] = useState([{
     role: "assistant",
     content: rol === "admin"
