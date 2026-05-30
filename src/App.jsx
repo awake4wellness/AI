@@ -2293,7 +2293,7 @@ Devuelve los 3 resultados más relevantes:
 }
 
 // ── PLUGIN: AI Copilot ─────────────────────────────────────
-function CopilotPlugin({ patient, user }) {
+function CopilotPlugin({ patient, user }) { 
   const { C } = useApp();
   const rol = user?.rol || "medico";
 
@@ -2318,7 +2318,6 @@ ${rol === "admin" ? `- Eres el ADMINISTRADOR. Puedes citar las fuentes específi
 - Solo da la respuesta clínica directa sin citar fuentes.`}
 
 Responde en español clínico profesional y conciso.`;
-
   const [msgs, setMsgs] = useState([{
     role: "assistant",
     content: rol === "admin"
@@ -2405,10 +2404,14 @@ Responde en español clínico profesional y conciso.`;
       <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}`}</style>
     </div>
   );
-}
+
 
 // ── PLUGIN: Device Integrations Hub ───────────────────────
-function DevicesPlugin() {
+}
+
+   
+
+   function DevicesPlugin() {
   const { C } = useApp();
   const devices = [
     { name: "FLIR One / T-series", icon: "🌡️", color: C.thermo, status: "activo", type: "Termografía", api: "FLIR Mobile SDK", action: "Configurado" },
@@ -3622,7 +3625,7 @@ function PatientPortal({ user, onSignOut }) {
             <Avatar name={`${yo.nombre} ${yo.apellido}`} size={56} color={C.teal} />
             <div>
               <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Hola, {yo.nombre} 👋</h2>
-              <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>{yo.condicion_principal}</p>
+              <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>{yo.a}</p>
             </div>
           </div>
 
