@@ -264,6 +264,7 @@ export function Modal({ open, onClose, title, children, width = 560 }) {
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: DS.colors.text }}>{title}</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 20, cursor: "pointer" }}>✕</button>
         </div>
+        {children}
       </div>
     </div>
   );
