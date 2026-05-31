@@ -1630,9 +1630,13 @@ Devuelve este JSON:
   "urgencia": "normal/moderada/alta",
   "recomendaciones": ["rec 1", "rec 2", "rec 3"],
   "progreso": "evaluación del progreso",
-  "siguiente_sesion": "indicaciones próxima sesión"
+  "siguiente_sesion": "indicaciones próxima sesión",
+  "zona_anatomica": "región/estructura anatómica precisa que se ve afectada en la imagen",
+  "musculos_afectados": "músculo(s) con patrón térmico alterado, o 'No concluyente'",
+  "nervios_afectados": "nervio(s) o territorio neural sugerido, o 'No concluyente'"
 }`;
-      const text = await CoreServices.askAI([{ role: "user", content: userMsg }], systemPrompt);
+      const contenido = img.base64 ? [{ type: "text", text: userMsg }, { type: "image_url", image_url: { url: img.base64 } }] : userMsg;
+      const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
       setAnalisisIA(JSON.parse((text || "{}").replace(/```json|```/g, "").trim()));
     } catch {
       setAnalisisIA({
