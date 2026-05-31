@@ -1622,7 +1622,7 @@ DATOS:
 
 Devuelve este JSON:
 {
-  "diagnostico": "diagnóstico termográfico principal",
+  "diagnostico": "Orientación termográfica principal",
   "nivel_alarma": "L1/L2/L3",
   "inflamacion": "estado inflamatorio",
   "crioterapia": true/false,
@@ -1802,7 +1802,7 @@ Devuelve este JSON:
                   {analisisIA && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div style={{ background: `${tsiColor(selectedImg.tsi)}08`, border: `1px solid ${tsiColor(selectedImg.tsi)}25`, borderRadius: 12, padding: "12px 14px" }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 }}>DIAGNÓSTICO TERMOGRÁFICO</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Orientación termográfica</div>
                         <div style={{ fontSize: 13, color: C.text }}>{analisisIA.diagnostico}</div>
                         <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                           <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: `${asimetriaColor(selectedImg.asimetria)}15`, color: asimetriaColor(selectedImg.asimetria), fontWeight: 700 }}>Nivel {analisisIA.nivel_alarma}</span>
