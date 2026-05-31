@@ -1835,7 +1835,11 @@ Devuelve este JSON:
                         <div style={{ fontSize: 11, fontWeight: 700, color: C.teal, marginBottom: 6 }}>PRÓXIMA SESIÓN</div>
                         <div style={{ fontSize: 12, color: C.text }}>{analisisIA.siguiente_sesion}</div>
                       </div>}
-                      <button onClick={() => alert("Análisis guardado ✓ (por ahora en pantalla; pronto se guardará de verdad)")} style={{ width: "100%", padding: "12px", borderRadius: 11, background: C.successDim, border: `1px solid ${C.success}35`, color: C.success, fontSize: 13, fontWeight: 800, cursor: "pointer", marginTop: 4 }}>💾 Guardar análisis</button>
+                      <button onClick={async () => {
+                        const notas = `🌡️ Termografía — ${analisisIA.diagnostico || ""}\nZona: ${analisisIA.zona_anatomica || "-"}\nMúsculos: ${analisisIA.musculos_afectados || "-"}\nNervios: ${analisisIA.nervios_afectados || "-"}\nRecomendaciones: ${(analisisIA.recomendaciones || []).join("; ")}`;
+                        const { error } = await CoreServices.insert("sessions", { paciente_id: patient?.id, numero_sesion: selectedImg.sesion || 1, protocolo: "Termografía", notas, fecha: new Date().toISOString() });
+                        alert(error ? "No se pudo guardar: " + (error.message || "error") : "Análisis guardado en la historia del paciente ✓");
+                      }} style={{ width: "100%", padding: "12px", borderRadius: 11, background: C.successDim, border: `1px solid ${C.success}35`, color: C.success, fontSize: 13, fontWeight: 800, cursor: "pointer", marginTop: 4 }}>💾 Guardar análisis</button>
                     </div>
                   )}
                   {!analisisIA && !analyzing && (
