@@ -3818,11 +3818,17 @@ export default function App() {
     CoreServices.query("patients").then(({ data }) => {
       if (data && data.length) setPatients(data);
     });
+    CoreServices.query("sessions").then(({ data }) => {
+      if (data && data.length) setSessions(data);
+    });
   }, []);
 
   useEffect(() => {
     CoreServices.query("patients").then(({ data }) => {
       if (data && data.length) setPatients(data);
+    });
+    CoreServices.query("sessions").then(({ data }) => {
+      if (data && data.length) setSessions(data);
     });
   }, []);
 
