@@ -3814,6 +3814,18 @@ export default function App() {
   const [patients, setPatients] = useState(DEMO_PATIENTS);
   const [sessions, setSessions] = useState(DEMO_SESSIONS);
 
+  useEffect(() => {
+    CoreServices.query("patients").then(({ data }) => {
+      if (data && data.length) setPatients(data);
+    });
+  }, []);
+
+  useEffect(() => {
+    CoreServices.query("patients").then(({ data }) => {
+      if (data && data.length) setPatients(data);
+    });
+  }, []);
+
   function navigate(id, patient = null) {
     setActive({ id, patient: patient || (id === "patient-detail" ? active.patient : null) });
   }
