@@ -1652,8 +1652,13 @@ Devuelve este JSON:
   function handleUpload(e) {
     const file = e.target.files?.[0]; if (!file) return;
     const url = URL.createObjectURL(file);
-    const nueva = { id: Date.now(), fecha: new Date().toLocaleDateString("es-ES"), sesion: imagenes.length + 1, zona: uploadForm.zona || "Sin especificar", tsi: uploadForm.tsi, asimetria: parseFloat(uploadForm.asimetria) || 0, url, notas: uploadForm.notas, protocolo: uploadForm.protocolo };
-    setImagenes(prev => [nueva, ...prev]);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result;
+      const nueva = { id: Date.now(), fecha: new Date().toLocaleDateString("es-ES"), sesion: imagenes.length + 1, zona: uploadForm.zona || "Sin especificar", tsi: uploadForm.tsi, asimetria: parseFloat(uploadForm.asimetria) || 0, url, base64, notas: uploadForm.notas, protocolo: uploadForm.protocolo };
+      setImagenes(prev => [nueva, ...prev]);
+    };
+    reader.readAsDataURL(file);
     setUploadForm({ zona: "", sesion: "", tsi: "Hipertérmico", asimetria: "", notas: "", protocolo: "" });
   }
 
