@@ -1630,7 +1630,6 @@ Devuelve este JSON:
   "urgencia": "normal/moderada/alta",
   "recomendaciones": ["rec 1", "rec 2", "rec 3"],
   "progreso": "evaluación del progreso",
-  "siguiente_sesion": "indicaciones próxima sesión",
   "zona_anatomica": "región/estructura anatómica precisa que se ve afectada en la imagen",
   "musculos_afectados": "músculo(s) con patrón térmico alterado, o 'No concluyente'",
   "nervios_afectados": "nervio(s) o territorio neural sugerido, o 'No concluyente'"
@@ -1836,6 +1835,7 @@ Devuelve este JSON:
                         <div style={{ fontSize: 11, fontWeight: 700, color: C.teal, marginBottom: 6 }}>PRÓXIMA SESIÓN</div>
                         <div style={{ fontSize: 12, color: C.text }}>{analisisIA.siguiente_sesion}</div>
                       </div>}
+                      <button onClick={() => alert("Análisis guardado ✓ (por ahora en pantalla; pronto se guardará de verdad)")} style={{ width: "100%", padding: "12px", borderRadius: 11, background: C.successDim, border: `1px solid ${C.success}35`, color: C.success, fontSize: 13, fontWeight: 800, cursor: "pointer", marginTop: 4 }}>💾 Guardar análisis</button>
                     </div>
                   )}
                   {!analisisIA && !analyzing && (
