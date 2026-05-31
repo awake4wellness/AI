@@ -1836,9 +1836,17 @@ Devuelve este JSON:
                         <div style={{ fontSize: 12, color: C.text }}>{analisisIA.siguiente_sesion}</div>
                       </div>}
                       <button onClick={async () => {
-                        const notas = `🌡️ Termografía — ${analisisIA.diagnostico || ""}\nZona: ${analisisIA.zona_anatomica || "-"}\nMúsculos: ${analisisIA.musculos_afectados || "-"}\nNervios: ${analisisIA.nervios_afectados || "-"}\nRecomendaciones: ${(analisisIA.recomendaciones || []).join("; ")}`;
+                        let urlFoto = "";
+                        if (selectedImg.base64) {
+                          const resp = await fetch(selectedImg.base64);
+                          const blob = await resp.blob();
+                          const ruta = `${patient?.id || "sin-paciente"}/${Date.now()}.jpg`;
+                          const sub = await CoreServices.uploadFile("Thermografias", ruta, blob);
+                          if (!sub.error) urlFoto = sub.url;
+                        }
+                        const notas = `🌡️ Termografía — ${analisisIA.diagnostico || ""}\nZona: ${analisisIA.zona_anatomica || "-"}\nMúsculos: ${analisisIA.musculos_afectados || "-"}\nNervios: ${analisisIA.nervios_afectados || "-"}\nRecomendaciones: ${(analisisIA.recomendaciones || []).join("; ")}${urlFoto ? "\nFoto: " + urlFoto : ""}`;
                         const { error } = await CoreServices.insert("sessions", { paciente_id: patient?.id, numero_sesion: selectedImg.sesion || 1, protocolo: "Termografía", notas, fecha: new Date().toISOString() });
-                        alert(error ? "No se pudo guardar: " + (error.message || "error") : "Análisis guardado en la historia del paciente ✓");
+                        alert(error ? "No se pudo guardar: " + (error.message || "error") : (urlFoto ? "Análisis y foto guardados ✓" : "Análisis guardado (la foto no se subió) ✓"));
                       }} style={{ width: "100%", padding: "12px", borderRadius: 11, background: C.successDim, border: `1px solid ${C.success}35`, color: C.success, fontSize: 13, fontWeight: 800, cursor: "pointer", marginTop: 4 }}>💾 Guardar análisis</button>
                     </div>
                   )}
