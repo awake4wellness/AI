@@ -1609,7 +1609,7 @@ function FLIRPlugin({ patient }) {
     setAnalyzing(true);
     setAnalisisIA(null);
     try {
-      const systemPrompt = `Eres Alex, asistente clínico de Awake4Wellness, especialista en termografía (Dr. Javier Cuartas). Respondes ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.`;
+      const systemPrompt = `Eres Alex, asistente clínico de Awake4Wellness, especialista en termografía (Dr. Javier Cuartas). Analizas el termograma en tres ejes clínicos: inflamación (zonas calientes/hipertérmicas), dolor y fatiga; y defines si el patrón corresponde a MÚSCULO (calor localizado, sobrecarga) o a NERVIO (asimetría fría en el territorio del nervio). Integra estos ejes en los campos diagnostico, inflamacion y recomendaciones. El termograma orienta; la lectura clínica final la confirma el médico. Respondes ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.`;
       const userMsg = `Analiza esta imagen termográfica clínica.
 
 DATOS:
