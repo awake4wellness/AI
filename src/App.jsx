@@ -495,7 +495,7 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const [alexText, setAlexText] = useState("");
   const [alexLoading, setAlexLoading] = useState(false);
-  const [alexError, setAlexError] = useState("");
+  const [alexError, setAlexError] = useState(""); const { transcript: alexVoz, listening: alexEscuchando, supported: alexMicOk, start: alexMicStart, stop: alexMicStop } = useSpeechRecognition(); useEffect(() => { if (alexVoz) setAlexText(alexVoz); }, [alexVoz]);
   async function rellenarConAlex() {
     if (!alexText.trim()) return;
     setAlexLoading(true); setAlexError("");
@@ -574,7 +574,7 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Escribe en una frase los datos del paciente y Alex los reparte en el formulario.</div>
           <textarea value={alexText} onChange={e => setAlexText(e.target.value)} placeholder="Ej: Carlos Mendoza, 34 años, hombre, tendinopatía rotuliana, juega tenis" rows={2} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
           {alexError && <div style={{ fontSize: 11, color: C.danger, marginBottom: 8 }}>{alexError}</div>}
-          <Btn onClick={rellenarConAlex} disabled={alexLoading || !alexText.trim()} color={C.success} fullWidth>
+          <Btn onClick={() => alexEscuchando ? alexMicStop() : alexMicStart()} disabled={!alexMicOk} color={alexEscuchando ? C.danger : C.primary} fullWidth style={{ marginBottom: 8 }}>{alexEscuchando ? "🔴 Escuchando... toca para parar" : "🎤 Dictar con voz"}</Btn><Btn onClick={rellenarConAlex} disabled={alexLoading || !alexText.trim()} color={C.success} fullWidth>
             {alexLoading ? "🧠 Alex está leyendo..." : "✨ Rellenar con Alex"}
           </Btn>
         </div>
