@@ -3701,6 +3701,47 @@ function BiorresonanciaPlugin({ patient }) {
   );
 }
 
+function CopilotoAlex({ patient }) {
+  const { C } = useApp();
+  const nombrePac = patient ? `${patient.nombre || ""} ${patient.apellido || ""}`.trim() : "";
+  const systemPrompt = `Eres Alex, el copiloto clínico de AWAKE4WELLNESS, la clínica del Dr. Javier Cuartas. Eres un asistente clínico profesional. Respondes en español, claro y conciso.${nombrePac ? ` Paciente actual: ${nombrePac}.` : ""}`;
+  const [msgs, setMsgs] = useState([{ role: "assistant", content: `Hola, soy Alex, tu copiloto clínico${nombrePac ? ` para ${nombrePac}` : ""}. ¿En qué te ayudo?` }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState("");
+  async function send() {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput("");
+    const next = [...msgs, { role: "user", content: text }];
+    setMsgs(next); setLoading(true); setStreaming("");
+    try {
+      let full = "";
+      await CoreServices.askAI(next.map(m => ({ role: m.role, content: m.content })), systemPrompt, chunk => { full = chunk; setStreaming(chunk); });
+      setMsgs(p => [...p, { role: "assistant", content: full }]); setStreaming("");
+    } catch (e) {
+      setMsgs(p => [...p, { role: "assistant", content: "Error: " + e.message }]);
+    } finally { setLoading(false); }
+  }
+  return (
+    <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      <h2 style={{ color: C.text, fontSize: 20, marginBottom: 4 }}>🧠 Copiloto IA — Alex</h2>
+      <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Asistente clínico</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+        {msgs.map((m, i) => (
+          <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", padding: "10px 14px", borderRadius: 12, background: m.role === "user" ? "rgba(56,189,248,0.12)" : C.surface, border: `1px solid ${C.border}`, color: C.text, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{m.content}</div>
+        ))}
+        {streaming && (<div style={{ alignSelf: "flex-start", maxWidth: "85%", padding: "10px 14px", borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`, color: C.text, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{streaming}</div>)}
+        {loading && !streaming && (<div style={{ alignSelf: "flex-start", color: C.muted, fontSize: 13 }}>Alex está escribiendo…</div>)}
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Escribe tu pregunta clínica…" rows={2} style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, padding: "10px 14px", resize: "none", fontFamily: "inherit" }} />
+        <button onClick={send} disabled={loading || !input.trim()} style={{ padding: "0 20px", borderRadius: 10, border: "none", background: C.teal || "#10b981", color: "#fff", fontSize: 16, cursor: loading ? "not-allowed" : "pointer" }}>{loading ? "⏳" : "↑"}</button>
+      </div>
+    </div>
+  );
+}
+
 const pluginRegistry = [
   { id: "dashboard", name: "Dashboard", icon: "📊", color: DS.colors.primary, group: "clinical", description: "Vista general clínica", component: DashboardPlugin },
   { id: "patients", name: "Pacientes", icon: "👥", color: DS.colors.teal, group: "clinical", description: "Gestión de pacientes", component: PatientsPlugin },
