@@ -1503,7 +1503,8 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
                       </div>
                     ))}
                   </div>
-                  {ses.notas && <div style={{ fontSize: 12, color: C.muted, background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 12px", marginTop: 10 }}>{ses.notas}</div>}
+                  {ses.notas && <div style={{ fontSize: 12, color: C.muted, background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 12px", marginTop: 10, whiteSpace: "pre-wrap" }}>{ses.notas}</div>}
+                  {ses.foto && <img src={ses.foto} alt="termografía" style={{ width: "100%", maxWidth: 320, borderRadius: 10, marginTop: 10, border: `1px solid ${C.border}` }} />}
                 </Card>
               );
             })}
