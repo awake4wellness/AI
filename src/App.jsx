@@ -1571,11 +1571,13 @@ function FLIRPlugin({ patient }) {
   const [saved, setSaved] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analisisIA, setAnalisisIA] = useState(null);
-  const [imagenes, setImagenes] = useState([
-    { id: 1, fecha: "15/05/2025", sesion: 1, zona: "Rodilla derecha", tsi: "Hipertérmico", asimetria: 2.1, url: null, notas: "Inflamación activa pre-tratamiento", protocolo: "HILT + Crioterapia" },
-    { id: 2, fecha: "22/05/2025", sesion: 3, zona: "Rodilla derecha", tsi: "Hipertérmico", asimetria: 1.6, url: null, notas: "Reducción parcial de inflamación", protocolo: "HILT" },
-    { id: 3, fecha: "29/05/2025", sesion: 6, zona: "Rodilla derecha", tsi: "Neutro", asimetria: 0.8, url: null, notas: "Excelente respuesta al tratamiento", protocolo: "Rehabilitación" },
-  ]);
+  const [imagenes, setImagenes] = useState([]);
+  useEffect(() => {
+    CoreServices.query("sessions", patient?.id ? { paciente_id: patient.id } : {}).then(({ data }) => {
+      const termos = (data || []).filter(s => s.protocolo === "Termografía" && s.foto);
+      setImagenes(termos.map((s, i) => ({ id: s.id || i, fecha: s.fecha ? new Date(s.fecha).toLocaleDateString("es-ES") : "", sesion: s.numero_sesion || (i + 1), zona: "Termografía", tsi: "Neutro", asimetria: 0, url: s.foto, notas: s.notas || "", protocolo: "Termografía" })));
+    });
+  }, [patient]);
   const [selectedImg, setSelectedImg] = useState(null);
   const [compareA, setCompareA] = useState(null);
   const [compareB, setCompareB] = useState(null);
