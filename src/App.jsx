@@ -3648,11 +3648,26 @@ function BiorresonanciaPlugin({ patient }) {
 
   function handleUpload(e) {
     const file = e.target.files?.[0]; if (!file) return;
+    setResultado("");
     const url = URL.createObjectURL(file);
     const reader = new FileReader();
-    reader.onload = () => setImg({ url, base64: reader.result });
+    reader.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const max = 1600;
+        let width = im.width, height = im.height;
+        if (width > max || height > max) {
+          const esc = Math.min(max / width, max / height);
+          width = Math.round(width * esc); height = Math.round(height * esc);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(im, 0, 0, width, height);
+        setImg({ url, base64: canvas.toDataURL("image/jpeg", 0.85) });
+      };
+      im.src = reader.result;
+    };
     reader.readAsDataURL(file);
-    setResultado("");
   }
 
   async function analizar() {
