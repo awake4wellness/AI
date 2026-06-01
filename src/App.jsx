@@ -3639,6 +3639,53 @@ function WearablesPlugin({ patient }) {
 // ═══════════════════════════════════════════════════════════════
 // REGISTRO DE PLUGINS — agrega/quita módulos aquí
 // ═══════════════════════════════════════════════════════════════
+function BiorresonanciaPlugin({ patient }) {
+  const { C } = useApp();
+  const [img, setImg] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [resultado, setResultado] = useState("");
+  const fileRef = useRef(null);
+
+  function handleUpload(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    const url = URL.createObjectURL(file);
+    const reader = new FileReader();
+    reader.onload = () => setImg({ url, base64: reader.result });
+    reader.readAsDataURL(file);
+    setResultado("");
+  }
+
+  async function analizar() {
+    if (!img) return;
+    setAnalyzing(true); setResultado("");
+    try {
+      const systemPrompt = "Eres Alex, asistente de bienestar de Awake4Wellness (Dr. Javier Cuartas). Te paso la imagen de un reporte de un equipo de biorresonancia. IMPORTANTE: la biorresonancia es orientativa, NO es un análisis de laboratorio ni un diagnóstico médico. Tu tarea: (1) leer el reporte y resumir en lenguaje claro las áreas que el equipo marca fuera de rango, enfocándote en NUTRICIÓN: vitaminas, enzimas y coenzimas, oligoelementos (trace elements) y composición corporal; (2) dar recomendaciones generales de bienestar y alimentación, seguras y sensatas. NO diagnostiques enfermedades. NO afirmes que el paciente 'tiene' deficiencias como un hecho; usa 'el reporte sugiere' u 'orientación'. Cierra recordando que es orientación de bienestar y que lo definitivo se confirma con laboratorio si procede. Responde en español, claro y breve, sin tecnicismos.";
+      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Dame el resumen y las recomendaciones de bienestar (vitaminas, enzimas, oligoelementos y lo corporal).";
+      const contenido = [{ type: "text", text: userMsg }, { type: "image_url", image_url: { url: img.base64 } }];
+      const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
+      setResultado(text || "No recibí respuesta. Intenta de nuevo.");
+    } catch (e) {
+      setResultado("Hubo un error al analizar: " + (e.message || e));
+    } finally { setAnalyzing(false); }
+  }
+
+  return (
+    <div style={{ padding: 24, maxWidth: 700 }}>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>🧬 Biorresonancia</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Orientación de bienestar - no reemplaza análisis de laboratorio.</div>
+      <div onClick={() => fileRef.current && fileRef.current.click()} style={{ background: C.surface, border: "2px dashed " + C.border, borderRadius: 16, padding: 28, textAlign: "center", marginBottom: 16, cursor: "pointer" }}>
+        <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
+        <div style={{ fontSize: 40, marginBottom: 8 }}>📤</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Subir imagen del reporte</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Toca para elegir la foto o captura del reporte</div>
+      </div>
+      {img && <img src={img.url} alt="reporte" style={{ width: "100%", borderRadius: 12, border: "1px solid " + C.border, marginBottom: 16 }} />}
+      {img && <button onClick={analizar} disabled={analyzing} style={{ background: C.teal, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 16 }}>{analyzing ? "Analizando con Alex..." : "🧠 Analizar con Alex"}</button>}
+      {resultado && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 18, fontSize: 14, color: C.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{resultado}</div>}
+    </div>
+  );
+}
+
 const pluginRegistry = [
   { id: "dashboard", name: "Dashboard", icon: "📊", color: DS.colors.primary, group: "clinical", description: "Vista general clínica", component: DashboardPlugin },
   { id: "patients", name: "Pacientes", icon: "👥", color: DS.colors.teal, group: "clinical", description: "Gestión de pacientes", component: PatientsPlugin },
