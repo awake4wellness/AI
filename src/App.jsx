@@ -333,7 +333,7 @@ export const CoreServices = {
     const token = this.getToken();
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Prefer": "return=representation" }, body: JSON.stringify(Array.isArray(body) ? body : [body]) });
     const d = await r.json();
-    return { data: d, error: d.error || null };
+    return { data: d, error: r.ok ? null : d };
   },
 
   // Storage (for images)
