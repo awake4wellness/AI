@@ -1542,7 +1542,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
           <div style={{ gridColumn: "1/-1" }}>
             <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6 }}>Protocolo</label>
             <select value={form.protocolo} onChange={e => setForm(p => ({ ...p, protocolo: e.target.value }))} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, padding: "10px 14px", fontFamily: "inherit" }}>
-              {["HILT", "Crioterapia", "Termografía", "Ecografía", "Acupuntura", "Rehabilitación", "Biorresonancia", "TENS", "EMS", "VALD", "InBody", "Bodygee"].map(o => <option key={o} value={o} style={{ background: "#1e293b" }}>{o}</option>)}
+              {["HILT", "Crioterapia", "Termografía", "Ecografía", "Acupuntura", "Rehabilitación", "Nutrición", "TENS", "EMS", "VALD", "InBody", "Bodygee"].map(o => <option key={o} value={o} style={{ background: "#1e293b" }}>{o}</option>)}
             </select>
           </div>
           {[{ k: "eva_pre", l: "EVA Pre (0-10)" }, { k: "eva_post", l: "EVA Post (0-10)" }, { k: "duracion_minutos", l: "Duración (min)" }].map(f => (
@@ -3639,7 +3639,7 @@ function WearablesPlugin({ patient }) {
 // ═══════════════════════════════════════════════════════════════
 // REGISTRO DE PLUGINS — agrega/quita módulos aquí
 // ═══════════════════════════════════════════════════════════════
-function BiorresonanciaPlugin({ patient }) {
+function NutriciónPlugin({ patient }) {
   const { C } = useApp();
   const [img, setImg] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -3686,7 +3686,7 @@ function BiorresonanciaPlugin({ patient }) {
 
   return (
     <div style={{ padding: 24, maxWidth: 700 }}>
-      <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>🧬 Biorresonancia</h2>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>🧬 Nutrición</h2>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Orientación de bienestar - no reemplaza análisis de laboratorio.</div>
       <div onClick={() => fileRef.current && fileRef.current.click()} style={{ background: C.surface, border: "2px dashed " + C.border, borderRadius: 16, padding: 28, textAlign: "center", marginBottom: 16, cursor: "pointer" }}>
         <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
@@ -3822,7 +3822,7 @@ const pluginRegistry = [
   { id: "patients", name: "Pacientes", icon: "👥", color: DS.colors.teal, group: "clinical", description: "Gestión de pacientes", component: PatientsPlugin },
   { id: "flir", name: "Termografía FLIR", icon: "🌡️", color: DS.colors.thermo, group: "devices", badge: "SDK", description: "Cámara térmica y galería", component: FLIRPlugin, patientAction: true, patientActionLabel: "Termografía", onPatientAction: (p, nav) => nav("flir", p) },
   { id: "copilot", name: "Copiloto IA", icon: "🧠", color: DS.colors.success, group: "ai", badge: "IA", description: "Asistente clínico Alex", component: CopilotoConImagenes, patientAction: true, patientActionLabel: "Copiloto", onPatientAction: (p, nav) => nav("copilot", p) },
-  { id: "biorresonancia", name: "Biorresonancia", icon: "🧬", color: DS.colors.teal, group: "devices", description: "Reportes y orientación de bienestar", component: BiorresonanciaPlugin }, { id: "devices", name: "Dispositivos", icon: "🔌", color: DS.colors.primary, group: "devices", description: "Hub de integraciones", component: DevicesPlugin },
+  { id: "biorresonancia", name: "Nutrición", icon: "🧬", color: DS.colors.teal, group: "devices", description: "Reportes y orientación de bienestar", component: NutriciónPlugin }, { id: "devices", name: "Dispositivos", icon: "🔌", color: DS.colors.primary, group: "devices", description: "Hub de integraciones", component: DevicesPlugin },
   { id: "inbody", name: "InBody", icon: "⚖️", color: DS.colors.primary, group: "devices", description: "Composición corporal", component: () => <PlaceholderPlugin name="InBody" icon="⚖️" description="Integración de composición corporal (LookinBody WebAPI + CSV)." coming />, patientAction: true, patientActionLabel: "InBody", onPatientAction: (p, nav) => nav("inbody", p) },
   { id: "vald", name: "VALD", icon: "💪", color: DS.colors.warning, group: "devices", description: "Fuerza y rendimiento", component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración de fuerza y rendimiento vía REST API (OAuth2)." coming />, patientAction: true, patientActionLabel: "VALD", onPatientAction: (p, nav) => nav("vald", p) },
   { id: "bodygee", name: "Bodygee", icon: "🔵", color: DS.colors.purple, group: "devices", description: "Escaneo 3D corporal", component: () => <PlaceholderPlugin name="Bodygee" icon="🔵" description="Escaneo 3D corporal vía REST API + Webhooks." coming /> },
