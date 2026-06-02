@@ -3641,42 +3641,95 @@ function WearablesPlugin({ patient }) {
 // ═══════════════════════════════════════════════════════════════
 function NutriciónPlugin({ patient }) {
   const { C } = useApp();
-  const [img, setImg] = useState(null);
+  const [paginas, setPaginas] = useState([]);
+  const [cargando, setCargando] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [resultado, setResultado] = useState("");
   const fileRef = useRef(null);
 
-  function handleUpload(e) {
-    const file = e.target.files?.[0]; if (!file) return;
-    setResultado("");
-    const url = URL.createObjectURL(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const im = new Image();
-      im.onload = () => {
-        const max = 1600;
-        let width = im.width, height = im.height;
-        if (width > max || height > max) {
-          const esc = Math.min(max / width, max / height);
-          width = Math.round(width * esc); height = Math.round(height * esc);
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width; canvas.height = height;
-        canvas.getContext("2d").drawImage(im, 0, 0, width, height);
-        setImg({ url, base64: canvas.toDataURL("image/jpeg", 0.85) });
+  function cargarPdfJs() {
+    return new Promise((resolve, reject) => {
+      if (window.pdfjsLib) { resolve(window.pdfjsLib); return; }
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      s.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(window.pdfjsLib);
       };
-      im.src = reader.result;
-    };
-    reader.readAsDataURL(file);
+      s.onerror = () => reject(new Error("No se pudo cargar el lector de PDF"));
+      document.body.appendChild(s);
+    });
+  }
+
+  async function pdfAImagenes(file) {
+    const pdfjsLib = await cargarPdfJs();
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const imgs = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      const base64 = canvas.toDataURL("image/jpeg", 0.85);
+      imgs.push({ url: base64, base64 });
+    }
+    return imgs;
+  }
+
+  function imagenABase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const im = new Image();
+        im.onload = () => {
+          const max = 1600;
+          let w = im.width, h = im.height;
+          if (w > max || h > max) {
+            const esc = Math.min(max / w, max / h);
+            w = Math.round(w * esc); h = Math.round(h * esc);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(im, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        im.onerror = reject;
+        im.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleUpload(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    setResultado(""); setPaginas([]); setCargando(true);
+    try {
+      const esPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (esPdf) {
+        const imgs = await pdfAImagenes(file);
+        setPaginas(imgs);
+      } else {
+        const base64 = await imagenABase64(file);
+        setPaginas([{ url: base64, base64 }]);
+      }
+    } catch (err) {
+      setResultado("No pude abrir el archivo: " + (err.message || err));
+    } finally {
+      setCargando(false);
+    }
   }
 
   async function analizar() {
-    if (!img) return;
+    if (!paginas.length) return;
     setAnalyzing(true); setResultado("");
     try {
       const systemPrompt = "Lee la imagen, que es una tabla de datos. Para cada fila indica: el nombre, su rango de referencia, el valor medido, y si el valor queda dentro o fuera de ese rango. Solo describe lo que aparece en la tabla, de forma clara y ordenada, en español. No agregues interpretaciones ni recomendaciones. Termina con esta sola línea: Esto es solo una lectura de los datos de la hoja, no un diagnóstico.";
-      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Solo organiza estos datos en una tabla clara y ordenada, en español. No agregues recomendaciones ni interpretaciones.";
-      const contenido = [{ type: "text", text: userMsg }, { type: "image_url", image_url: { url: img.base64 } }];
+      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Son " + paginas.length + " página(s). Junta todas las filas de todas las páginas en una sola tabla clara y ordenada, en español. No agregues recomendaciones ni interpretaciones.";
+      const contenido = [{ type: "text", text: userMsg }, ...paginas.map(p => ({ type: "image_url", image_url: { url: p.base64 } }))];
       const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
       setResultado(text || "No recibí respuesta. Intenta de nuevo.");
     } catch (e) {
@@ -3687,15 +3740,16 @@ function NutriciónPlugin({ patient }) {
   return (
     <div style={{ padding: 24, maxWidth: 700 }}>
       <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>🧬 Nutrición</h2>
-      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Orientación de bienestar - no reemplaza análisis de laboratorio.</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Lectura ordenada de los datos del reporte - no reemplaza análisis de laboratorio.</div>
       <div onClick={() => fileRef.current && fileRef.current.click()} style={{ background: C.surface, border: "2px dashed " + C.border, borderRadius: 16, padding: 28, textAlign: "center", marginBottom: 16, cursor: "pointer" }}>
-        <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
+        <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={handleUpload} style={{ display: "none" }} />
         <div style={{ fontSize: 40, marginBottom: 8 }}>📤</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Subir imagen del reporte</div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Toca para elegir la foto o captura del reporte</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Subir reporte (PDF o imagen)</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Toca para elegir el PDF, la foto o la captura del reporte</div>
       </div>
-      {img && <img src={img.url} alt="reporte" style={{ width: "100%", borderRadius: 12, border: "1px solid " + C.border, marginBottom: 16 }} />}
-      {img && <button onClick={analizar} disabled={analyzing} style={{ background: C.teal, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 16 }}>{analyzing ? "Analizando con Alex..." : "🧠 Analizar con Alex"}</button>}
+      {cargando && <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Abriendo el archivo…</div>}
+      {paginas.map((p, i) => <img key={i} src={p.url} alt={"reporte " + (i + 1)} style={{ width: "100%", borderRadius: 12, border: "1px solid " + C.border, marginBottom: 8 }} />)}
+      {paginas.length > 0 && <button onClick={analizar} disabled={analyzing} style={{ background: C.teal, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 8, marginBottom: 16 }}>{analyzing ? "Analizando con Alex..." : "🧠 Analizar con Alex"}</button>}
       {resultado && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 18, fontSize: 14, color: C.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{resultado}</div>}
     </div>
   );
