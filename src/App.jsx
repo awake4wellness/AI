@@ -3831,6 +3831,20 @@ function NutriciónPlugin({ patient }) {
           </div>
         </div>
       )}
+      {filas.length > 0 && <button onClick={async () => {
+        if (!patient || !patient.id) { alert("Abre la Nutrición desde un paciente para poder guardar."); return; }
+        const lineas = filas.map(f => f.sistema + " | " + f.item + " | " + f.rango + " | " + f.valor + " | " + (f.estado === "dentro" ? "Dentro" : f.estado === "fuera" ? "Fuera" : "-")).join("\n");
+        const notas = "🧬 Nutrición — lectura de reporte (" + filas.length + " filas)\nSistema | Ítem | Rango | Valor | Estado\n" + lineas + "\n\nEsto es solo una lectura de los datos de la hoja, no un diagnóstico.";
+        const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Nutrición", notas: notas, fecha: new Date().toISOString() });
+        alert(r.error ? "No se pudo guardar: " + (r.error.message || "error") : "Reporte guardado en la historia ✓");
+      }} style={{ background: C.success, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 12 }}>💾 Guardar en la historia del paciente</button>}
+      {filas.length > 0 && <button onClick={async () => {
+        if (!patient || !patient.id) { alert("Abre la Nutrición desde un paciente para poder guardar."); return; }
+        const lineas = filas.map(f => f.sistema + " | " + f.item + " | " + f.rango + " | " + f.valor + " | " + (f.estado === "dentro" ? "Dentro" : f.estado === "fuera" ? "Fuera" : "-")).join("\n");
+        const notas = "🧬 Nutrición — lectura de reporte (" + filas.length + " filas)\nSistema | Ítem | Rango | Valor | Estado\n" + lineas + "\n\nEsto es solo una lectura de los datos de la hoja, no un diagnóstico.";
+        const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Nutrición", notas: notas, fecha: new Date().toISOString() });
+        alert(r.error ? "No se pudo guardar: " + (r.error.message || "error") : "Reporte guardado en la historia ✓");
+      }} style={{ background: C.success, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 12 }}>💾 Guardar en la historia del paciente</button>}
       {filas.length > 0 && <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Esto es solo una lectura de los datos de la hoja, no un diagnóstico.</div>}
     </div>
   );
@@ -3957,7 +3971,7 @@ const pluginRegistry = [
   { id: "patients", name: "Pacientes", icon: "👥", color: DS.colors.teal, group: "clinical", description: "Gestión de pacientes", component: PatientsPlugin },
   { id: "flir", name: "Termografía FLIR", icon: "🌡️", color: DS.colors.thermo, group: "devices", badge: "SDK", description: "Cámara térmica y galería", component: FLIRPlugin, patientAction: true, patientActionLabel: "Termografía", onPatientAction: (p, nav) => nav("flir", p) },
   { id: "copilot", name: "Copiloto IA", icon: "🧠", color: DS.colors.success, group: "ai", badge: "IA", description: "Asistente clínico Alex", component: CopilotoConImagenes, patientAction: true, patientActionLabel: "Copiloto", onPatientAction: (p, nav) => nav("copilot", p) },
-  { id: "biorresonancia", name: "Nutrición", icon: "🧬", color: DS.colors.teal, group: "devices", description: "Reportes y orientación de bienestar", component: NutriciónPlugin }, { id: "devices", name: "Dispositivos", icon: "🔌", color: DS.colors.primary, group: "devices", description: "Hub de integraciones", component: DevicesPlugin },
+  { id: "biorresonancia", name: "Nutrición", icon: "🧬", color: DS.colors.teal, group: "devices", description: "Reportes y orientación de bienestar", component: NutriciónPlugin, patientAction: true, patientActionLabel: "Nutrición", onPatientAction: (p, nav) => nav("biorresonancia", p) }, { id: "devices", name: "Dispositivos", icon: "🔌", color: DS.colors.primary, group: "devices", description: "Hub de integraciones", component: DevicesPlugin },
   { id: "inbody", name: "InBody", icon: "⚖️", color: DS.colors.primary, group: "devices", description: "Composición corporal", component: () => <PlaceholderPlugin name="InBody" icon="⚖️" description="Integración de composición corporal (LookinBody WebAPI + CSV)." coming />, patientAction: true, patientActionLabel: "InBody", onPatientAction: (p, nav) => nav("inbody", p) },
   { id: "vald", name: "VALD", icon: "💪", color: DS.colors.warning, group: "devices", description: "Fuerza y rendimiento", component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración de fuerza y rendimiento vía REST API (OAuth2)." coming />, patientAction: true, patientActionLabel: "VALD", onPatientAction: (p, nav) => nav("vald", p) },
   { id: "bodygee", name: "Bodygee", icon: "🔵", color: DS.colors.purple, group: "devices", description: "Escaneo 3D corporal", component: () => <PlaceholderPlugin name="Bodygee" icon="🔵" description="Escaneo 3D corporal vía REST API + Webhooks." coming /> },
