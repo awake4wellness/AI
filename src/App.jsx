@@ -3883,7 +3883,146 @@ const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un re
   );
 }
 
-function CopilotoAlex({ patient }) {
+function FuerzaMuscularPlugin({ patient }) {
+  const { C } = useApp();
+  const [imagen, setImagen] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [datos, setDatos] = useState(null);
+  const [observaciones, setObservaciones] = useState("");
+  const [analisis, setAnalisis] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const [guardado, setGuardado] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef(null);
+
+  function imagenABase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const im = new Image();
+        im.onload = () => {
+          const max = 1600;
+          let w = im.width, h = im.height;
+          if (w > max || h > max) { const esc = Math.min(max / w, max / h); w = Math.round(w * esc); h = Math.round(h * esc); }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(im, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        im.onerror = reject;
+        im.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleUpload(e) {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    setError(""); setDatos(null); setAnalisis(""); setGuardado(false); setCargando(true);
+    try {
+      const base64 = await imagenABase64(file);
+      setImagen({ url: base64, base64: base64 });
+    } catch (err) { setError("No pude abrir la imagen: " + (err.message || err)); }
+    finally { setCargando(false); }
+  }
+
+  async function leerFitto() {
+    if (!imagen) return;
+    setAnalyzing(true); setError(""); setDatos(null);
+    try {
+      const systemPrompt = "Eres un lector de la app FITTO (Olive Healthcare) que mide masa muscular por segmento. La imagen es una captura de pantalla del FITTO. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"total_lb\":\"\",\"grasa_pct\":\"\",\"musculo_pct\":\"\",\"brazo_izq\":\"\",\"brazo_der\":\"\",\"pierna_izq\":\"\",\"pierna_der\":\"\",\"balance_brazos\":\"\",\"balance_piernas\":\"\"}. brazo_izq y brazo_der son la masa muscular en libras de Lt Arm y Rt Arm; pierna_izq y pierna_der de Lt Leg y Rt Leg. total_lb es la masa muscular total; grasa_pct el porcentaje de grasa; musculo_pct el porcentaje de musculo. balance_brazos y balance_piernas: escribe 'equilibrado' o 'hacia la derecha' o 'hacia la izquierda' si se ve; si no, deja vacio. Si un dato no aparece, dejalo como cadena vacia. No inventes.";
+      const userMsg = "Captura del FITTO" + (patient ? (" del paciente " + patient.nombre + " " + (patient.apellido || "")) : "") + ". Lee los numeros de masa muscular.";
+      const contenido = [{ type: "text", text: userMsg }, { type: "image_url", image_url: { url: imagen.base64 } }];
+      const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
+      const limpio = (text || "{}").replace(/[`]{3}json|[`]{3}/g, "").trim();
+      let d = {};
+      try { d = JSON.parse(limpio); } catch (e) { const m = limpio.match(/\{[\s\S]*\}/); if (m) { try { d = JSON.parse(m[0]); } catch (e2) {} } }
+      if (!d || Object.keys(d).length === 0) { setError("No pude leer los datos. Intenta con una captura mas nitida."); }
+      else { setDatos(d); }
+    } catch (e) { setError("Error al leer: " + (e.message || e)); }
+    finally { setAnalyzing(false); }
+  }
+
+  async function analizarConAlex() {
+    if (!datos) return;
+    setGenerando(true); setError(""); setAnalisis("");
+    try {
+      const sp = "Eres Alex, el copiloto clinico de AWAKE4WELLNESS (Dr. Javier Cuartas). Recibes datos de masa muscular del FITTO y las observaciones del medico. Das una interpretacion clinica breve (3 a 5 lineas) en espanol: equilibrio entre lados, zonas mas debiles y una sugerencia general. Integra SIEMPRE las observaciones del medico. No inventas datos. Esto orienta; la decision final la toma el medico.";
+      const um = "PACIENTE: " + (patient ? (patient.nombre + " " + (patient.apellido || "") + ", " + (patient.edad || "?") + " anios") : "no especificado")
+        + "\n\nDATOS FITTO (masa muscular):"
+        + "\n- Total: " + (datos.total_lb || "-") + " lb"
+        + "\n- Grasa: " + (datos.grasa_pct || "-") + "%"
+        + "\n- Brazo izq: " + (datos.brazo_izq || "-") + " | Brazo der: " + (datos.brazo_der || "-")
+        + "\n- Pierna izq: " + (datos.pierna_izq || "-") + " | Pierna der: " + (datos.pierna_der || "-")
+        + "\n- Balance brazos: " + (datos.balance_brazos || "-") + " | piernas: " + (datos.balance_piernas || "-")
+        + "\n\nOBSERVACIONES DEL MEDICO:\n" + (observaciones || "(sin observaciones)")
+        + "\n\nDa tu interpretacion clinica breve.";
+      let full = "";
+      await CoreServices.askAI([{ role: "user", content: um }], sp, function (ch) { full = ch; setAnalisis(ch); });
+      setAnalisis(full);
+    } catch (e) { setError("Error al analizar: " + (e.message || e)); }
+    finally { setGenerando(false); }
+  }
+
+  async function guardar() {
+    if (!patient || !patient.id) { alert("Abre Fuerza Muscular desde un paciente para poder guardar."); return; }
+    const notas = "Fuerza Muscular (FITTO)"
+      + "\nMasa total: " + ((datos && datos.total_lb) || "-") + " lb - Grasa: " + ((datos && datos.grasa_pct) || "-") + "%"
+      + "\nBrazo izq: " + ((datos && datos.brazo_izq) || "-") + " | Brazo der: " + ((datos && datos.brazo_der) || "-")
+      + "\nPierna izq: " + ((datos && datos.pierna_izq) || "-") + " | Pierna der: " + ((datos && datos.pierna_der) || "-")
+      + "\nBalance brazos: " + ((datos && datos.balance_brazos) || "-") + " | piernas: " + ((datos && datos.balance_piernas) || "-")
+      + "\n\nObservaciones del medico:\n" + (observaciones || "(sin observaciones)")
+      + (analisis ? ("\n\nAlex:\n" + analisis) : "");
+    const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Fuerza Muscular", notas: notas, fecha: new Date().toISOString() });
+    if (r.error) { alert("No se pudo guardar: " + (r.error.message || "error")); } else { setGuardado(true); }
+  }
+
+  const badge = { position: "absolute", background: "rgba(6,11,22,0.85)", border: "1px solid " + C.teal + "66", borderRadius: 9, padding: "5px 9px", textAlign: "center", minWidth: 66 };
+  const bz = { fontSize: 9, color: C.muted, fontWeight: 700 };
+  const bn = { fontSize: 14, fontWeight: 900, color: C.teal, lineHeight: 1.1 };
+
+  return (
+    <div style={{ padding: 24, maxWidth: 760 }}>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>💪 Fuerza Muscular</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Sube la captura del FITTO. Alex lee la masa muscular y la muestra en el muñeco.</div>
+      <div onClick={() => fileRef.current && fileRef.current.click()} style={{ background: C.surface, border: "2px dashed " + C.border, borderRadius: 16, padding: 24, textAlign: "center", marginBottom: 16, cursor: "pointer" }}>
+        <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
+        <div style={{ fontSize: 36, marginBottom: 8 }}>📤</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Subir captura del FITTO</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Toca para elegir la foto o captura de pantalla</div>
+      </div>
+      {cargando && <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Abriendo la imagen…</div>}
+      {imagen && <img src={imagen.url} alt="captura FITTO" style={{ width: "100%", maxWidth: 360, borderRadius: 12, border: "1px solid " + C.border, marginBottom: 12 }} />}
+      {imagen && !datos && <button onClick={leerFitto} disabled={analyzing} style={{ background: C.teal, border: "none", color: "#04201c", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 800, cursor: "pointer", width: "100%", marginBottom: 16 }}>{analyzing ? "Leyendo el FITTO…" : "Leer el FITTO con Alex"}</button>}
+      {error && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.danger, marginBottom: 16 }}>{error}</div>}
+      {datos && (
+        <div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            {[{ l: "Masa muscular", v: ((datos.total_lb || "-") + " lb"), c: C.teal }, { l: "Grasa", v: ((datos.grasa_pct || "-") + "%"), c: C.warning }, { l: "Músculo", v: ((datos.musculo_pct || "-") + "%"), c: C.primary }].map(s => (
+              <div key={s.l} style={{ flex: 1, textAlign: "center", background: "rgba(255,255,255,0.02)", border: "1px solid " + C.border, borderRadius: 12, padding: "10px 6px" }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: s.c }}>{s.v}</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, marginBottom: 10 }}>MAPA POR SEGMENTO</div>
+            <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "0 auto" }}>
+              <svg viewBox="0 0 220 470" style={{ width: "100%", display: "block" }}>
+                <circle cx="110" cy="42" r="27" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="98" y="64" width="24" height="20" rx="8" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <path d="M70 84 Q110 74 150 84 L143 212 Q110 224 77 212 Z" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="47" y="88" width="22" height="126" rx="11" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="151" y="88" width="22" height="126" rx="11" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <path d="M80 202 L140 202 L133 248 Q110 260 87 248 Z" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="84" y="244" width="26" height="180" rx="13" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="110" y="244" width="26" height="180" rx="13" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="80" y="418" width="34" height="16" rx="7" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="106" y="418" width="34" height="16" rx="7" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+              </svg>
+              <div style={{ ...badge, top: "20%", left: -6 }}><div style={bz}>BRAZO IZQ</div><div style={bn}>{datos.brazo_izq || "—"}</div></div>
   const { C } = useApp();
   const nombrePac = patient ? `${patient.nombre || ""} ${patient.apellido || ""}`.trim() : "";
   const systemPrompt = `Eres Alex, el copiloto clínico de AWAKE4WELLNESS, la clínica del Dr. Javier Cuartas. Eres un asistente clínico profesional. Respondes en español, claro y conciso.${nombrePac ? ` Paciente actual: ${nombrePac}.` : ""}`;
