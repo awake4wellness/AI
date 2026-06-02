@@ -4023,6 +4023,26 @@ function FuerzaMuscularPlugin({ patient }) {
                 <rect x="106" y="418" width="34" height="16" rx="7" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
               </svg>
               <div style={{ ...badge, top: "20%", left: -6 }}><div style={bz}>BRAZO IZQ</div><div style={bn}>{datos.brazo_izq || "—"}</div></div>
+              <div style={{ ...badge, top: "20%", right: -6 }}><div style={bz}>BRAZO DER</div><div style={bn}>{datos.brazo_der || "—"}</div></div>
+              <div style={{ ...badge, top: "58%", left: -6 }}><div style={bz}>PIERNA IZQ</div><div style={bn}>{datos.pierna_izq || "—"}</div></div>
+              <div style={{ ...badge, top: "58%", right: -6 }}><div style={bz}>PIERNA DER</div><div style={bn}>{datos.pierna_der || "—"}</div></div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: "block", marginBottom: 6 }}>Observaciones del médico</label>
+            <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Lo que observas en el paciente…" rows={3} style={{ width: "100%", background: C.surface, border: "1px solid " + C.border, borderRadius: 10, color: C.text, fontSize: 14, padding: "10px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
+          </div>
+          <button onClick={analizarConAlex} disabled={generando} style={{ background: C.teal, border: "none", color: "#04201c", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 800, cursor: "pointer", width: "100%", marginBottom: 12 }}>{generando ? "Alex está analizando…" : "🧠 Analizar con Alex"}</button>
+          {analisis && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 12 }}>{analisis}</div>}
+          <button onClick={guardar} style={{ background: guardado ? C.success : "transparent", border: "1px solid " + (guardado ? C.success : C.border), color: guardado ? "#fff" : C.muted, borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%" }}>{guardado ? "✓ Guardado en la historia" : "💾 Guardar en la historia del paciente"}</button>
+          <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic", marginTop: 10 }}>Esto orienta; la decisión clínica final la toma el médico.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CopilotoTextoAntiguo({ patient }) {
   const { C } = useApp();
   const nombrePac = patient ? `${patient.nombre || ""} ${patient.apellido || ""}`.trim() : "";
   const systemPrompt = `Eres Alex, el copiloto clínico de AWAKE4WELLNESS, la clínica del Dr. Javier Cuartas. Eres un asistente clínico profesional. Respondes en español, claro y conciso.${nombrePac ? ` Paciente actual: ${nombrePac}.` : ""}`;
