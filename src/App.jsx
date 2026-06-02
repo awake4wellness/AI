@@ -4075,7 +4075,19 @@ function FuerzaMuscularPlugin({ patient }) {
       + "\nBalance brazos: " + ((datos && datos.balance_brazos) || "-") + " | piernas: " + ((datos && datos.balance_piernas) || "-")
       + "\n\nObservaciones del medico:\n" + (observaciones || "(sin observaciones)")
       + (analisis ? ("\n\nAlex:\n" + analisis) : "");
-    const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Fuerza Muscular", notas: notas, fecha: new Date().toISOString() });
+    let urlFoto = "";
+    if (imagen && imagen.base64) {
+      try {
+        const resp = await fetch(imagen.base64);
+        const blob = await resp.blob();
+        const ruta = (patient.id || "sin-paciente") + "/fuerza-" + Date.now() + ".jpg";
+        const sub = await CoreServices.uploadFile("Thermografias", ruta, blob);
+        if (!sub.error) urlFoto = sub.url;
+      } catch (e) {}
+      // Si el guardarropa falló, guardamos la foto directo (base64) para que igual quede
+      if (!urlFoto) urlFoto = imagen.base64;
+    }
+    const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Fuerza Muscular", notas: notas, foto: urlFoto || "", fecha: new Date().toISOString() });
     if (r.error) { alert("No se pudo guardar: " + (r.error.message || "error")); } else { setGuardado(true); }
   }
 
