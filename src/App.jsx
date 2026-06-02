@@ -3883,7 +3883,8 @@ const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un re
   );
 }
 
-function FuerzaMuscularPlugin({ patient }) {
+// eslint-disable-next-line no-unused-vars
+function FuerzaMuscularPluginViejo({ patient }) {
   const { C } = useApp();
   const [imagen, setImagen] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -4154,6 +4155,346 @@ function CopilotoConImagenes({ patient }) {
         <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Escribe o adjunta una imagen…" rows={2} style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, padding: "10px 14px", resize: "none", fontFamily: "inherit" }} />
         <button onClick={send} disabled={loading || (!input.trim() && !img)} style={{ padding: "0 20px", borderRadius: 10, border: "none", background: C.teal || "#10b981", color: "#fff", fontSize: 16, cursor: loading ? "not-allowed" : "pointer" }}>{loading ? "⏳" : "↑"}</button>
       </div>
+    </div>
+  );
+}
+
+function FuerzaMuscularPlugin({ patient }) {
+  const { C } = useApp();
+  const [imagen, setImagen] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [generando, setGenerando] = useState(false);
+  const [datos, setDatos] = useState(null);
+  const [observaciones, setObservaciones] = useState("");
+  const [analisis, setAnalisis] = useState("");
+  const [guardado, setGuardado] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef(null);
+
+  function imagenABase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const im = new Image();
+        im.onload = () => {
+          const max = 1600;
+          let w = im.width, h = im.height;
+          if (w > max || h > max) { const esc = Math.min(max / w, max / h); w = Math.round(w * esc); h = Math.round(h * esc); }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(im, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        im.onerror = reject;
+        im.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleUpload(e) {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    setError(""); setDatos(null); setAnalisis(""); setGuardado(false); setCargando(true);
+    try {
+      const base64 = await imagenABase64(file);
+      setImagen({ url: base64, base64: base64 });
+    } catch (err) { setError("No pude abrir la imagen: " + (err.message || err)); }
+    finally { setCargando(false); }
+  }
+
+  async function analizarTodo() {
+    if (!imagen) return;
+    setError(""); setAnalisis(""); setDatos(null); setGuardado(false);
+    setAnalyzing(true);
+    let d = {};
+    try {
+      const spLeer = "Eres un lector de la app FITTO (Olive Healthcare) que mide masa muscular por segmento. La imagen es una captura de pantalla del FITTO. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"total_lb\":\"\",\"grasa_pct\":\"\",\"musculo_pct\":\"\",\"brazo_izq\":\"\",\"brazo_der\":\"\",\"pierna_izq\":\"\",\"pierna_der\":\"\",\"balance_brazos\":\"\",\"balance_piernas\":\"\"}. brazo_izq y brazo_der son la masa muscular en libras de Lt Arm y Rt Arm; pierna_izq y pierna_der de Lt Leg y Rt Leg. total_lb es la masa muscular total; grasa_pct el porcentaje de grasa; musculo_pct el porcentaje de musculo. balance_brazos y balance_piernas: escribe 'equilibrado' o 'hacia la derecha' o 'hacia la izquierda' si se ve; si no, deja vacio. Si un dato no aparece, dejalo como cadena vacia. No inventes.";
+      const umLeer = "Captura del FITTO" + (patient ? (" del paciente " + patient.nombre + " " + (patient.apellido || "")) : "") + ". Lee los numeros de masa muscular.";
+      const contenido = [{ type: "text", text: umLeer }, { type: "image_url", image_url: { url: imagen.base64 } }];
+      const text = await CoreServices.askAI([{ role: "user", content: contenido }], spLeer);
+      const limpio = (text || "{}").replace(/[`]{3}json|[`]{3}/g, "").trim();
+      try { d = JSON.parse(limpio); } catch (e) { const m = limpio.match(/\{[\s\S]*\}/); if (m) { try { d = JSON.parse(m[0]); } catch (e2) {} } }
+    } catch (e) {
+      setError("Error al leer la imagen: " + (e.message || e));
+      setAnalyzing(false);
+      return;
+    }
+    setAnalyzing(false);
+    if (!d || Object.keys(d).length === 0) { setError("No pude leer los datos. Intenta con una captura mas nitida."); return; }
+    setDatos(d);
+
+    setGenerando(true);
+    try {
+      const sp = "Eres Alex, el copiloto clinico de AWAKE4WELLNESS (Dr. Javier Cuartas), experto en composicion corporal y rendimiento muscular. Recibes datos de masa muscular por segmento del FITTO (Olive Healthcare) y las observaciones del medico. IMPORTANTE: el FITTO mide masa muscular por SEGMENTO (brazo izquierdo, brazo derecho, pierna izquierda, pierna derecha) y porcentajes de grasa y de musculo; no mide musculos individuales, asi que cuando nombres musculos aclara que forman parte de ese segmento y no inventes cifras por musculo. Da una interpretacion clinica COMPLETA y bien estructurada en espanol, con estas secciones en mayusculas: 1) RESUMEN GENERAL: masa muscular total, porcentaje de grasa y de musculo, y que significan. 2) ANALISIS POR SEGMENTO: para cada extremidad menciona los musculos principales que la componen (brazo: biceps, triceps, deltoides y antebrazo; pierna: cuadriceps, isquiotibiales, gluteos, gemelos y soleo) e interpreta su masa. 3) SIMETRIA: compara brazo izquierdo contra derecho y pierna izquierda contra derecha, indica si hay desequilibrio, de cuanto y hacia que lado. 4) HALLAZGOS: zonas mas debiles o desbalanceadas y posibles implicaciones como riesgo de lesion o compensaciones. 5) SUGERENCIAS: enfoque general de entrenamiento o rehabilitacion para corregir lo encontrado. Integra SIEMPRE las observaciones del medico en tu analisis. Se claro, profesional y a la vez comprensible. No inventes datos numericos que el aparato no dio. Cierra recordando que esto orienta y que la decision clinica final la toma el medico.";
+      const um = "PACIENTE: " + (patient ? (patient.nombre + " " + (patient.apellido || "") + ", " + (patient.edad || "?") + " anios") : "no especificado")
+        + "\n\nDATOS FITTO (masa muscular):"
+        + "\n- Total: " + (d.total_lb || "-") + " lb"
+        + "\n- Grasa: " + (d.grasa_pct || "-") + "%"
+        + "\n- Musculo: " + (d.musculo_pct || "-") + "%"
+        + "\n- Brazo izq: " + (d.brazo_izq || "-") + " | Brazo der: " + (d.brazo_der || "-")
+        + "\n- Pierna izq: " + (d.pierna_izq || "-") + " | Pierna der: " + (d.pierna_der || "-")
+        + "\n- Balance brazos: " + (d.balance_brazos || "-") + " | piernas: " + (d.balance_piernas || "-")
+        + "\n\nOBSERVACIONES DEL MEDICO:\n" + (observaciones || "(sin observaciones)")
+        + "\n\nDa tu interpretacion clinica completa y estructurada segun las secciones indicadas.";
+      let full = "";
+      await CoreServices.askAI([{ role: "user", content: um }], sp, function (ch) { full = ch; setAnalisis(ch); });
+      setAnalisis(full);
+    } catch (e) { setError("Error al analizar: " + (e.message || e)); }
+    finally { setGenerando(false); }
+  }
+
+  async function guardar() {
+    if (!patient || !patient.id) { alert("Abre Fuerza Muscular desde un paciente para poder guardar."); return; }
+    const notas = "Fuerza Muscular (FITTO)"
+      + "\nMasa total: " + ((datos && datos.total_lb) || "-") + " lb - Grasa: " + ((datos && datos.grasa_pct) || "-") + "%"
+      + "\nBrazo izq: " + ((datos && datos.brazo_izq) || "-") + " | Brazo der: " + ((datos && datos.brazo_der) || "-")
+      + "\nPierna izq: " + ((datos && datos.pierna_izq) || "-") + " | Pierna der: " + ((datos && datos.pierna_der) || "-")
+      + "\nBalance brazos: " + ((datos && datos.balance_brazos) || "-") + " | piernas: " + ((datos && datos.balance_piernas) || "-")
+      + "\n\nObservaciones del medico:\n" + (observaciones || "(sin observaciones)")
+      + (analisis ? ("\n\nAlex:\n" + analisis) : "");
+    const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Fuerza Muscular", notas: notas, fecha: new Date().toISOString() });
+    if (r.error) { alert("No se pudo guardar: " + (r.error.message || "error")); } else { setGuardado(true); }
+  }
+
+  const ocupado = analyzing || generando;
+  const badge = { position: "absolute", background: "rgba(6,11,22,0.85)", border: "1px solid " + C.teal + "66", borderRadius: 9, padding: "5px 9px", textAlign: "center", minWidth: 66 };
+  const bz = { fontSize: 9, color: C.muted, fontWeight: 700 };
+  const bn = { fontSize: 14, fontWeight: 900, color: C.teal, lineHeight: 1.1 };
+
+  return (
+    <div style={{ padding: 24, maxWidth: 760 }}>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>💪 Fuerza Muscular</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Paso 1: sube la captura del FITTO y escribe tus observaciones. Paso 2: dale a Analizar con Alex.</div>
+
+      <div onClick={() => fileRef.current && fileRef.current.click()} style={{ background: C.surface, border: "2px dashed " + C.border, borderRadius: 16, padding: 24, textAlign: "center", marginBottom: 16, cursor: "pointer" }}>
+        <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
+        <div style={{ fontSize: 36, marginBottom: 8 }}>📤</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Subir captura del FITTO</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Toca para elegir la foto o captura de pantalla</div>
+      </div>
+
+      {cargando && <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Abriendo la imagen…</div>}
+      {imagen && <img src={imagen.url} alt="captura FITTO" style={{ width: "100%", maxWidth: 360, borderRadius: 12, border: "1px solid " + C.border, marginBottom: 12 }} />}
+
+      {imagen && (
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: "block", marginBottom: 6 }}>Observaciones del médico (escríbelas antes de analizar)</label>
+          <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Lo que observas en el paciente, o datos que falten por leer…" rows={3} style={{ width: "100%", background: C.surface, border: "1px solid " + C.border, borderRadius: 10, color: C.text, fontSize: 14, padding: "10px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
+        </div>
+      )}
+
+      {imagen && <button onClick={analizarTodo} disabled={ocupado} style={{ background: C.teal, border: "none", color: "#04201c", borderRadius: 10, padding: "13px 18px", fontSize: 15, fontWeight: 800, cursor: ocupado ? "default" : "pointer", width: "100%", marginBottom: 16, opacity: ocupado ? 0.7 : 1 }}>{analyzing ? "Leyendo el FITTO…" : generando ? "Alex está analizando…" : "🧠 Analizar con Alex"}</button>}
+
+      {error && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.danger, marginBottom: 16 }}>{error}</div>}
+
+      {datos && (
+        <div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            {[{ l: "Masa muscular", v: ((datos.total_lb || "-") + " lb"), c: C.teal }, { l: "Grasa", v: ((datos.grasa_pct || "-") + "%"), c: C.warning }, { l: "Músculo", v: ((datos.musculo_pct || "-") + "%"), c: C.primary }].map(s => (
+              <div key={s.l} style={{ flex: 1, textAlign: "center", background: "rgba(255,255,255,0.02)", border: "1px solid " + C.border, borderRadius: 12, padding: "10px 6px" }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: s.c }}>{s.v}</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, marginBottom: 10 }}>MAPA POR SEGMENTO</div>
+            <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "0 auto" }}>
+              <svg viewBox="0 0 220 470" style={{ width: "100%", display: "block" }}>
+                <circle cx="110" cy="42" r="27" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="98" y="64" width="24" height="20" rx="8" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <path d="M70 84 Q110 74 150 84 L143 212 Q110 224 77 212 Z" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="47" y="88" width="22" height="126" rx="11" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="151" y="88" width="22" height="126" rx="11" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <path d="M80 202 L140 202 L133 248 Q110 260 87 248 Z" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="84" y="244" width="26" height="180" rx="13" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="110" y="244" width="26" height="180" rx="13" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="80" y="418" width="34" height="16" rx="7" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="106" y="418" width="34" height="16" rx="7" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+              </svg>
+              <div style={{ ...badge, top: "20%", left: -6 }}><div style={bz}>BRAZO IZQ</div><div style={bn}>{datos.brazo_izq || "—"}</div></div>
+              <div style={{ ...badge, top: "20%", right: -6 }}><div style={bz}>BRAZO DER</div><div style={bn}>{datos.brazo_der || "—"}</div></div>
+              <div style={{ ...badge, top: "58%", left: -6 }}><div style={bz}>PIERNA IZQ</div><div style={bn}>{datos.pierna_izq || "—"}</div></div>
+              <div style={{ ...badge, top: "58%", right: -6 }}><div style={bz}>PIERNA DER</div><div style={bn}>{datos.pierna_der || "—"}</div></div>
+            </div>
+          </div>
+          {analisis && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 12 }}>{analisis}</div>}
+          <button onClick={guardar} style={{ background: guardado ? C.success : "transparent", border: "1px solid " + (guardado ? C.success : C.border), color: guardado ? "#fff" : C.muted, borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%" }}>{guardado ? "✓ Guardado en la historia" : "💾 Guardar en la historia del paciente"}</button>
+          <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic", marginTop: 10 }}>Esto orienta; la decisión clínica final la toma el médico.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FuerzaMuscularPlugin({ patient }) {
+  const { C } = useApp();
+  const [imagen, setImagen] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [generando, setGenerando] = useState(false);
+  const [datos, setDatos] = useState(null);
+  const [observaciones, setObservaciones] = useState("");
+  const [analisis, setAnalisis] = useState("");
+  const [guardado, setGuardado] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef(null);
+
+  function imagenABase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const im = new Image();
+        im.onload = () => {
+          const max = 1600;
+          let w = im.width, h = im.height;
+          if (w > max || h > max) { const esc = Math.min(max / w, max / h); w = Math.round(w * esc); h = Math.round(h * esc); }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(im, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        im.onerror = reject;
+        im.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleUpload(e) {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    setError(""); setDatos(null); setAnalisis(""); setGuardado(false); setCargando(true);
+    try {
+      const base64 = await imagenABase64(file);
+      setImagen({ url: base64, base64: base64 });
+    } catch (err) { setError("No pude abrir la imagen: " + (err.message || err)); }
+    finally { setCargando(false); }
+  }
+
+  async function analizarTodo() {
+    if (!imagen) return;
+    setError(""); setAnalisis(""); setDatos(null); setGuardado(false);
+    setAnalyzing(true);
+    let d = {};
+    try {
+      const spLeer = "Eres un lector de la app FITTO (Olive Healthcare) que mide masa muscular por segmento. La imagen es una captura de pantalla del FITTO. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"total_lb\":\"\",\"grasa_pct\":\"\",\"musculo_pct\":\"\",\"brazo_izq\":\"\",\"brazo_der\":\"\",\"pierna_izq\":\"\",\"pierna_der\":\"\",\"balance_brazos\":\"\",\"balance_piernas\":\"\"}. brazo_izq y brazo_der son la masa muscular en libras de Lt Arm y Rt Arm; pierna_izq y pierna_der de Lt Leg y Rt Leg. total_lb es la masa muscular total; grasa_pct el porcentaje de grasa; musculo_pct el porcentaje de musculo. balance_brazos y balance_piernas: escribe 'equilibrado' o 'hacia la derecha' o 'hacia la izquierda' si se ve; si no, deja vacio. Si un dato no aparece, dejalo como cadena vacia. No inventes.";
+      const umLeer = "Captura del FITTO" + (patient ? (" del paciente " + patient.nombre + " " + (patient.apellido || "")) : "") + ". Lee los numeros de masa muscular.";
+      const contenido = [{ type: "text", text: umLeer }, { type: "image_url", image_url: { url: imagen.base64 } }];
+      const text = await CoreServices.askAI([{ role: "user", content: contenido }], spLeer);
+      const limpio = (text || "{}").replace(/[`]{3}json|[`]{3}/g, "").trim();
+      try { d = JSON.parse(limpio); } catch (e) { const m = limpio.match(/\{[\s\S]*\}/); if (m) { try { d = JSON.parse(m[0]); } catch (e2) {} } }
+    } catch (e) {
+      setError("Error al leer la imagen: " + (e.message || e));
+      setAnalyzing(false);
+      return;
+    }
+    setAnalyzing(false);
+    if (!d || Object.keys(d).length === 0) { setError("No pude leer los datos. Intenta con una captura mas nitida."); return; }
+    setDatos(d);
+
+    setGenerando(true);
+    try {
+      const sp = "Eres Alex, el copiloto clinico de AWAKE4WELLNESS (Dr. Javier Cuartas), experto en composicion corporal y rendimiento muscular. Recibes datos de masa muscular por segmento del FITTO (Olive Healthcare) y las observaciones del medico. IMPORTANTE: el FITTO mide masa muscular por SEGMENTO (brazo izquierdo, brazo derecho, pierna izquierda, pierna derecha) y porcentajes de grasa y de musculo; no mide musculos individuales, asi que cuando nombres musculos aclara que forman parte de ese segmento y no inventes cifras por musculo. Da una interpretacion clinica COMPLETA y bien estructurada en espanol, con estas secciones en mayusculas: 1) RESUMEN GENERAL: masa muscular total, porcentaje de grasa y de musculo, y que significan. 2) ANALISIS POR SEGMENTO: para cada extremidad menciona los musculos principales que la componen (brazo: biceps, triceps, deltoides y antebrazo; pierna: cuadriceps, isquiotibiales, gluteos, gemelos y soleo) e interpreta su masa. 3) SIMETRIA: compara brazo izquierdo contra derecho y pierna izquierda contra derecha, indica si hay desequilibrio, de cuanto y hacia que lado. 4) HALLAZGOS: zonas mas debiles o desbalanceadas y posibles implicaciones como riesgo de lesion o compensaciones. 5) SUGERENCIAS: enfoque general de entrenamiento o rehabilitacion para corregir lo encontrado. Integra SIEMPRE las observaciones del medico en tu analisis. Se claro, profesional y a la vez comprensible. No inventes datos numericos que el aparato no dio. Cierra recordando que esto orienta y que la decision clinica final la toma el medico.";
+      const um = "PACIENTE: " + (patient ? (patient.nombre + " " + (patient.apellido || "") + ", " + (patient.edad || "?") + " anios") : "no especificado")
+        + "\n\nDATOS FITTO (masa muscular):"
+        + "\n- Total: " + (d.total_lb || "-") + " lb"
+        + "\n- Grasa: " + (d.grasa_pct || "-") + "%"
+        + "\n- Musculo: " + (d.musculo_pct || "-") + "%"
+        + "\n- Brazo izq: " + (d.brazo_izq || "-") + " | Brazo der: " + (d.brazo_der || "-")
+        + "\n- Pierna izq: " + (d.pierna_izq || "-") + " | Pierna der: " + (d.pierna_der || "-")
+        + "\n- Balance brazos: " + (d.balance_brazos || "-") + " | piernas: " + (d.balance_piernas || "-")
+        + "\n\nOBSERVACIONES DEL MEDICO:\n" + (observaciones || "(sin observaciones)")
+        + "\n\nDa tu interpretacion clinica completa y estructurada segun las secciones indicadas.";
+      let full = "";
+      await CoreServices.askAI([{ role: "user", content: um }], sp, function (ch) { full = ch; setAnalisis(ch); });
+      setAnalisis(full);
+    } catch (e) { setError("Error al analizar: " + (e.message || e)); }
+    finally { setGenerando(false); }
+  }
+
+  async function guardar() {
+    if (!patient || !patient.id) { alert("Abre Fuerza Muscular desde un paciente para poder guardar."); return; }
+    const notas = "Fuerza Muscular (FITTO)"
+      + "\nMasa total: " + ((datos && datos.total_lb) || "-") + " lb - Grasa: " + ((datos && datos.grasa_pct) || "-") + "%"
+      + "\nBrazo izq: " + ((datos && datos.brazo_izq) || "-") + " | Brazo der: " + ((datos && datos.brazo_der) || "-")
+      + "\nPierna izq: " + ((datos && datos.pierna_izq) || "-") + " | Pierna der: " + ((datos && datos.pierna_der) || "-")
+      + "\nBalance brazos: " + ((datos && datos.balance_brazos) || "-") + " | piernas: " + ((datos && datos.balance_piernas) || "-")
+      + "\n\nObservaciones del medico:\n" + (observaciones || "(sin observaciones)")
+      + (analisis ? ("\n\nAlex:\n" + analisis) : "");
+    const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Fuerza Muscular", notas: notas, fecha: new Date().toISOString() });
+    if (r.error) { alert("No se pudo guardar: " + (r.error.message || "error")); } else { setGuardado(true); }
+  }
+
+  const ocupado = analyzing || generando;
+  const badge = { position: "absolute", background: "rgba(6,11,22,0.85)", border: "1px solid " + C.teal + "66", borderRadius: 9, padding: "5px 9px", textAlign: "center", minWidth: 66 };
+  const bz = { fontSize: 9, color: C.muted, fontWeight: 700 };
+  const bn = { fontSize: 14, fontWeight: 900, color: C.teal, lineHeight: 1.1 };
+
+  return (
+    <div style={{ padding: 24, maxWidth: 760 }}>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>💪 Fuerza Muscular</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Paso 1: sube la captura del FITTO y escribe tus observaciones. Paso 2: dale a Analizar con Alex.</div>
+
+      <div onClick={() => fileRef.current && fileRef.current.click()} style={{ background: C.surface, border: "2px dashed " + C.border, borderRadius: 16, padding: 24, textAlign: "center", marginBottom: 16, cursor: "pointer" }}>
+        <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
+        <div style={{ fontSize: 36, marginBottom: 8 }}>📤</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Subir captura del FITTO</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Toca para elegir la foto o captura de pantalla</div>
+      </div>
+
+      {cargando && <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Abriendo la imagen…</div>}
+      {imagen && <img src={imagen.url} alt="captura FITTO" style={{ width: "100%", maxWidth: 360, borderRadius: 12, border: "1px solid " + C.border, marginBottom: 12 }} />}
+
+      {imagen && (
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: "block", marginBottom: 6 }}>Observaciones del médico (escríbelas antes de analizar)</label>
+          <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Lo que observas en el paciente, o datos que falten por leer…" rows={3} style={{ width: "100%", background: C.surface, border: "1px solid " + C.border, borderRadius: 10, color: C.text, fontSize: 14, padding: "10px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
+        </div>
+      )}
+
+      {imagen && <button onClick={analizarTodo} disabled={ocupado} style={{ background: C.teal, border: "none", color: "#04201c", borderRadius: 10, padding: "13px 18px", fontSize: 15, fontWeight: 800, cursor: ocupado ? "default" : "pointer", width: "100%", marginBottom: 16, opacity: ocupado ? 0.7 : 1 }}>{analyzing ? "Leyendo el FITTO…" : generando ? "Alex está analizando…" : "🧠 Analizar con Alex"}</button>}
+
+      {error && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.danger, marginBottom: 16 }}>{error}</div>}
+
+      {datos && (
+        <div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            {[{ l: "Masa muscular", v: ((datos.total_lb || "-") + " lb"), c: C.teal }, { l: "Grasa", v: ((datos.grasa_pct || "-") + "%"), c: C.warning }, { l: "Músculo", v: ((datos.musculo_pct || "-") + "%"), c: C.primary }].map(s => (
+              <div key={s.l} style={{ flex: 1, textAlign: "center", background: "rgba(255,255,255,0.02)", border: "1px solid " + C.border, borderRadius: 12, padding: "10px 6px" }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: s.c }}>{s.v}</div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: 1.5, marginBottom: 10 }}>MAPA POR SEGMENTO</div>
+            <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "0 auto" }}>
+              <svg viewBox="0 0 220 470" style={{ width: "100%", display: "block" }}>
+                <circle cx="110" cy="42" r="27" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="98" y="64" width="24" height="20" rx="8" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <path d="M70 84 Q110 74 150 84 L143 212 Q110 224 77 212 Z" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="47" y="88" width="22" height="126" rx="11" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="151" y="88" width="22" height="126" rx="11" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <path d="M80 202 L140 202 L133 248 Q110 260 87 248 Z" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="84" y="244" width="26" height="180" rx="13" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="110" y="244" width="26" height="180" rx="13" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="80" y="418" width="34" height="16" rx="7" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+                <rect x="106" y="418" width="34" height="16" rx="7" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
+              </svg>
+              <div style={{ ...badge, top: "20%", left: -6 }}><div style={bz}>BRAZO IZQ</div><div style={bn}>{datos.brazo_izq || "—"}</div></div>
+              <div style={{ ...badge, top: "20%", right: -6 }}><div style={bz}>BRAZO DER</div><div style={bn}>{datos.brazo_der || "—"}</div></div>
+              <div style={{ ...badge, top: "58%", left: -6 }}><div style={bz}>PIERNA IZQ</div><div style={bn}>{datos.pierna_izq || "—"}</div></div>
+              <div style={{ ...badge, top: "58%", right: -6 }}><div style={bz}>PIERNA DER</div><div style={bn}>{datos.pierna_der || "—"}</div></div>
+            </div>
+          </div>
+          {analisis && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 12 }}>{analisis}</div>}
+          <button onClick={guardar} style={{ background: guardado ? C.success : "transparent", border: "1px solid " + (guardado ? C.success : C.border), color: guardado ? "#fff" : C.muted, borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%" }}>{guardado ? "✓ Guardado en la historia" : "💾 Guardar en la historia del paciente"}</button>
+          <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic", marginTop: 10 }}>Esto orienta; la decisión clínica final la toma el médico.</div>
+        </div>
+      )}
     </div>
   );
 }
