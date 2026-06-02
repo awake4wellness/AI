@@ -3808,7 +3808,7 @@ const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un re
       }
       setProgreso("");
       if (!todas.length) setError("No pude leer filas del reporte. Intenta con un PDF o foto más nítido.");
-      setFilas(todas);
+      setFilas(todas.filter((f, i, a) => a.findIndex(x => x.sistema === f.sistema && x.item === f.item && x.valor === f.valor) === i));;
     } catch (e) {
       setProgreso("");
       setError("Hubo un error al analizar: " + (e.message || e));
