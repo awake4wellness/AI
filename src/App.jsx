@@ -1874,7 +1874,7 @@ Devuelve este JSON:
                           const blob = await resp.blob();
                           const ruta = `${patient?.id || "sin-paciente"}/${Date.now()}.jpg`;
                           const sub = await CoreServices.uploadFile("Thermografias", ruta, blob);
-                          if (!sub.error) urlFoto = sub.url;
+                          if (!sub.error) urlFoto = sub.url; else alert("ERROR FOTO: " + JSON.stringify(sub.error));
                         }
                         const notas = `🌡️ Termografía — ${analisisIA.diagnostico || ""}\nZona: ${analisisIA.zona_anatomica || "-"}\nMúsculos: ${analisisIA.musculos_afectados || "-"}\nNervios: ${analisisIA.nervios_afectados || "-"}\nRecomendaciones: ${(analisisIA.recomendaciones || []).join("; ")}${urlFoto ? "\nFoto: " + urlFoto : ""}`;
                         const { error } = await CoreServices.insert("sessions", { paciente_id: patient?.id, numero_sesion: selectedImg.sesion || 1, protocolo: "Termografía", notas, foto: urlFoto || "", fecha: new Date().toISOString() });
@@ -4082,7 +4082,7 @@ function FuerzaMuscularPlugin({ patient }) {
         const blob = await resp.blob();
         const ruta = (patient.id || "sin-paciente") + "/fuerza-" + Date.now() + ".jpg";
         const sub = await CoreServices.uploadFile("Thermografias", ruta, blob);
-        if (!sub.error) urlFoto = sub.url;
+        if (!sub.error) urlFoto = sub.url; else alert("ERROR FOTO: " + JSON.stringify(sub.error));
       } catch (e) {}
       // Si el guardarropa falló, guardamos la foto directo (base64) para que igual quede
       if (!urlFoto) urlFoto = imagen.base64;
