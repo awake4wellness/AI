@@ -1508,8 +1508,37 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
                       </div>
                     ))}
                   </div>
-                  {ses.notas && <div style={{ fontSize: 12, color: C.muted, background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 12px", marginTop: 10, whiteSpace: "pre-wrap" }}>{ses.notas}</div>}
-                  {ses.foto && <img src={ses.foto} alt="termografía" style={{ width: "100%", maxWidth: 320, borderRadius: 10, marginTop: 10, border: `1px solid ${C.border}` }} />}
+ {ses.notas && (ses.protocolo === "Nutrición"
+  ? (() => {
+      const filasN = ses.notas.split("\n").filter(l => l.includes(" | "));
+      return (
+        <div style={{ marginTop: 10, background: "rgba(255,255,255,0.02)", borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+          <div style={{ padding: "8px 12px", fontSize: 12, fontWeight: 700, color: C.teal, borderBottom: `1px solid ${C.border}` }}>🧬 Lectura de reporte ({Math.max(0, filasN.length - 1)} ítems)</div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <tbody>
+                {filasN.map((l, i) => {
+                  const c = l.split(" | ");
+                  const cab = (c[0] || "").trim() === "Sistema";
+                  const est = (c[4] || "").trim();
+                  return (
+                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: cab ? "rgba(255,255,255,0.03)" : "transparent" }}>
+                      <td style={{ padding: "5px 10px", color: cab ? C.muted : C.text, fontWeight: cab ? 700 : 400 }}>{c[0]}</td>
+                      <td style={{ padding: "5px 10px", color: cab ? C.muted : C.text, fontWeight: cab ? 700 : 400 }}>{c[1]}</td>
+                      <td style={{ padding: "5px 10px", color: C.muted }}>{c[2]}</td>
+                      <td style={{ padding: "5px 10px", color: C.text }}>{c[3]}</td>
+                      <td style={{ padding: "5px 10px", fontWeight: 700, color: est === "Fuera" ? C.danger : est === "Dentro" ? C.success : C.muted }}>{est}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    })()
+  : <div style={{ fontSize: 12, color: C.muted, background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 12px", marginTop: 10, whiteSpace: "pre-wrap" }}>{ses.notas}</div>
+)}                 {ses.foto && <img src={ses.foto} alt="termografía" style={{ width: "100%", maxWidth: 320, borderRadius: 10, marginTop: 10, border: `1px solid ${C.border}` }} />}
                 </Card>
               );
             })}
