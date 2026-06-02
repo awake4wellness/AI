@@ -3760,7 +3760,7 @@ function NutriciónPlugin({ patient }) {
     if (!paginas.length) return;
     setAnalyzing(true); setError(""); setFilas([]); setProgreso("");
     try {
-      const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un reporte con una tabla de datos. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"filas\":[{\"sistema\":\"\",\"item\":\"\",\"rango\":\"\",\"valor\":\"\"}]}. Incluye TODAS las filas que veas en esta imagen. 'sistema' es la categoria o sistema, 'item' es el nombre del elemento de prueba, 'rango' es el rango normal tal cual aparece, 'valor' es la medicion tal cual aparece. No agregues interpretaciones ni recomendaciones.";
+      const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un reporte con una tabla de datos. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"filas\":[{\"sistema\":\"\",\"item\":\"\",\"rango\":\"\",\"valor\":\"\"}]}. Incluye TODAS las filas que veas en esta imagen. Para 'sistema' y 'item', escribe primero el texto en su idioma original (como aparece en la imagen) y luego su traduccion al espanol, separados por ' / '. Ejemplo de item: 'Skin Moisture Loss / Perdida de humedad de la piel'. Ejemplo de sistema: 'Skin / Piel'. Si el texto ya esta en espanol, dejalo igual sin duplicar. 'rango' es el rango normal tal cual aparece, sin traducir. 'valor' es la medicion tal cual aparece, sin traducir. No agregues interpretaciones ni recomendaciones.";
       const todas = [];
       for (let i = 0; i < paginas.length; i++) {
         setProgreso("Leyendo página " + (i + 1) + " de " + paginas.length + "…");
