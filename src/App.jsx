@@ -3644,6 +3644,7 @@ function NutriciónPlugin({ patient }) {
   const [paginas, setPaginas] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [progreso, setProgreso] = useState("");
   const [filas, setFilas] = useState([]);
   const [error, setError] = useState("");
   const fileRef = useRef(null);
@@ -3715,6 +3716,22 @@ function NutriciónPlugin({ patient }) {
     return (v >= min && v <= max) ? "dentro" : "fuera";
   }
 
+  function parsearFilas(text) {
+    const limpio = (text || "").replace(/```json|```/g, "").trim();
+    try {
+      const d = JSON.parse(limpio);
+      if (Array.isArray(d)) return d;
+      if (d && Array.isArray(d.filas)) return d.filas;
+    } catch (e) {}
+    const filas = [];
+    const re = /\{[^{}]*\}/g;
+    let m;
+    while ((m = re.exec(limpio)) !== null) {
+      try { filas.push(JSON.parse(m[0])); } catch (e) {}
+    }
+    return filas;
+  }
+
   async function handleUpload(e) {
     const file = e.target.files?.[0]; if (!file) return;
     setError(""); setFilas([]); setPaginas([]); setCargando(true);
@@ -3736,23 +3753,31 @@ function NutriciónPlugin({ patient }) {
 
   async function analizar() {
     if (!paginas.length) return;
-    setAnalyzing(true); setError(""); setFilas([]);
+    setAnalyzing(true); setError(""); setFilas([]); setProgreso("");
     try {
-      const systemPrompt = "Eres un lector de tablas. La imagen es un reporte con una tabla de datos. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"filas\":[{\"sistema\":\"\",\"item\":\"\",\"rango\":\"\",\"valor\":\"\"}]}. Incluye TODAS las filas de TODAS las paginas. 'sistema' es la categoria o sistema, 'item' es el nombre del elemento de prueba, 'rango' es el rango normal tal cual aparece, 'valor' es la medicion tal cual aparece. No agregues interpretaciones ni recomendaciones.";
-      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Son " + paginas.length + " pagina(s). Junta todas las filas de todas las paginas en una sola lista.";
-      const contenido = [{ type: "text", text: userMsg }, ...paginas.map(p => ({ type: "image_url", image_url: { url: p.base64 } }))];
-      const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
-      const data = JSON.parse((text || "{}").replace(/```json|```/g, "").trim());
-      const lista = (data.filas || []).map(f => ({
-        sistema: f.sistema || "",
-        item: f.item || "",
-        rango: f.rango || "",
-        valor: f.valor || "",
-        estado: calcularEstado(f.rango, f.valor),
-      }));
-      if (!lista.length) setError("No pude leer filas del reporte. Intenta con una foto o PDF más nítido.");
-      setFilas(lista);
+      const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un reporte con una tabla de datos. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"filas\":[{\"sistema\":\"\",\"item\":\"\",\"rango\":\"\",\"valor\":\"\"}]}. Incluye TODAS las filas que veas en esta imagen. 'sistema' es la categoria o sistema, 'item' es el nombre del elemento de prueba, 'rango' es el rango normal tal cual aparece, 'valor' es la medicion tal cual aparece. No agregues interpretaciones ni recomendaciones.";
+      const todas = [];
+      for (let i = 0; i < paginas.length; i++) {
+        setProgreso("Leyendo página " + (i + 1) + " de " + paginas.length + "…");
+        const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ", página " + (i + 1) + ". Devuelve las filas de la tabla de esta imagen.";
+        const contenido = [{ type: "text", text: userMsg }, { type: "image_url", image_url: { url: paginas[i].base64 } }];
+        const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
+        const filasPag = parsearFilas(text);
+        for (const f of filasPag) {
+          todas.push({
+            sistema: f.sistema || "",
+            item: f.item || "",
+            rango: f.rango || "",
+            valor: f.valor || "",
+            estado: calcularEstado(f.rango, f.valor),
+          });
+        }
+      }
+      setProgreso("");
+      if (!todas.length) setError("No pude leer filas del reporte. Intenta con un PDF o foto más nítido.");
+      setFilas(todas);
     } catch (e) {
+      setProgreso("");
       setError("Hubo un error al analizar: " + (e.message || e));
     } finally { setAnalyzing(false); }
   }
@@ -3772,7 +3797,7 @@ function NutriciónPlugin({ patient }) {
       </div>
       {cargando && <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Abriendo el archivo…</div>}
       {paginas.map((p, i) => <img key={i} src={p.url} alt={"reporte " + (i + 1)} style={{ width: "100%", borderRadius: 12, border: "1px solid " + C.border, marginBottom: 8 }} />)}
-      {paginas.length > 0 && <button onClick={analizar} disabled={analyzing} style={{ background: C.teal, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 8, marginBottom: 16 }}>{analyzing ? "Analizando con Alex..." : "🧠 Analizar con Alex"}</button>}
+      {paginas.length > 0 && <button onClick={analizar} disabled={analyzing} style={{ background: C.teal, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 8, marginBottom: 16 }}>{analyzing ? (progreso || "Analizando con Alex...") : "🧠 Analizar con Alex"}</button>}
       {error && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.danger, marginBottom: 16 }}>{error}</div>}
       {filas.length > 0 && (
         <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
