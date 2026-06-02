@@ -1442,7 +1442,12 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ protocolo: "HILT", eva_pre: 5, eva_post: 3, notas: "", duracion_minutos: 30 });
-  const patSess = sessions.filter(s => s.paciente_id === patient.id).sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
+  const [sesionesBd, setSesionesBd] = useState([]);
+  useEffect(() => {
+    CoreServices.query("sessions", patient?.id ? { paciente_id: patient.id } : {}).then(({ data }) => { if (data) setSesionesBd(data); });
+  }, [patient]);
+  const todasSesiones = sesionesBd.length ? sesionesBd : sessions;
+  const patSess = todasSesiones.filter(s => s.paciente_id === patient.id).sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
   const mej = patSess.filter(s => s.eva_pre && s.eva_post).length ? Math.round(patSess.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / patSess.filter(s => s.eva_pre && s.eva_post).length) : 0;
 
   async function save() { setSaving(true); await onAddSession({ ...form, paciente_id: patient.id, numero_sesion: patSess.length + 1 }); setShowModal(false); setSaving(false); }
