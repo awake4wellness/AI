@@ -3675,7 +3675,7 @@ function NutriciónPlugin({ patient }) {
     setAnalyzing(true); setResultado("");
     try {
       const systemPrompt = "Lee la imagen, que es una tabla de datos. Para cada fila indica: el nombre, su rango de referencia, el valor medido, y si el valor queda dentro o fuera de ese rango. Solo describe lo que aparece en la tabla, de forma clara y ordenada, en español. No agregues interpretaciones ni recomendaciones. Termina con esta sola línea: Esto es solo una lectura de los datos de la hoja, no un diagnóstico.";
-      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Dame el resumen y las recomendaciones de bienestar (vitaminas, enzimas, oligoelementos y lo corporal).";
+      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Solo organiza estos datos en una tabla clara y ordenada, en español. No agregues recomendaciones ni interpretaciones.";
       const contenido = [{ type: "text", text: userMsg }, { type: "image_url", image_url: { url: img.base64 } }];
       const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
       setResultado(text || "No recibí respuesta. Intenta de nuevo.");
