@@ -3864,14 +3864,14 @@ const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un re
           </div>
         </div>
       )}
-      {filas.length > 0 && <button onClick={async () => {
+      {false && <button onClick={async () => {
         if (!patient || !patient.id) { alert("Abre la Nutrición desde un paciente para poder guardar."); return; }
         const lineas = filas.map(f => f.sistema + " | " + f.item + " | " + f.rango + " | " + f.valor + " | " + (f.estado === "dentro" ? "Dentro" : f.estado === "fuera" ? "Fuera" : "-")).join("\n");
         const notas = "🧬 Nutrición — lectura de reporte (" + filas.length + " filas)\nSistema | Ítem | Rango | Valor | Estado\n" + lineas + "\n\nEsto es solo una lectura de los datos de la hoja, no un diagnóstico.";
         const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Nutrición", notas: notas, fecha: new Date().toISOString() });
         alert(r.error ? "No se pudo guardar: " + (r.error.message || "error") : "Reporte guardado en la historia ✓");
       }} style={{ background: C.success, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 12 }}>💾 Guardar en la historia del paciente</button>}
-      {filas.length > 0 && <button onClick={async () => {
+      {false && <button onClick={async () => {
         if (!patient || !patient.id) { alert("Abre la Nutrición desde un paciente para poder guardar."); return; }
         const lineas = filas.map(f => f.sistema + " | " + f.item + " | " + f.rango + " | " + f.valor + " | " + (f.estado === "dentro" ? "Dentro" : f.estado === "fuera" ? "Fuera" : "-")).join("\n");
         const notas = "🧬 Nutrición — lectura de reporte (" + filas.length + " filas)\nSistema | Ítem | Rango | Valor | Estado\n" + lineas + "\n\nEsto es solo una lectura de los datos de la hoja, no un diagnóstico.";
