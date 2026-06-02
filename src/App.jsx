@@ -3644,7 +3644,8 @@ function NutriciónPlugin({ patient }) {
   const [paginas, setPaginas] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [resultado, setResultado] = useState("");
+  const [filas, setFilas] = useState([]);
+  const [error, setError] = useState("");
   const fileRef = useRef(null);
 
   function cargarPdfJs() {
@@ -3704,9 +3705,19 @@ function NutriciónPlugin({ patient }) {
     });
   }
 
+  function calcularEstado(rango, valor) {
+    const v = parseFloat(String(valor).replace(",", "."));
+    const m = String(rango).match(/(-?\d+[.,]?\d*)\s*[-–~]\s*(-?\d+[.,]?\d*)/);
+    if (isNaN(v) || !m) return "";
+    const min = parseFloat(m[1].replace(",", "."));
+    const max = parseFloat(m[2].replace(",", "."));
+    if (isNaN(min) || isNaN(max)) return "";
+    return (v >= min && v <= max) ? "dentro" : "fuera";
+  }
+
   async function handleUpload(e) {
     const file = e.target.files?.[0]; if (!file) return;
-    setResultado(""); setPaginas([]); setCargando(true);
+    setError(""); setFilas([]); setPaginas([]); setCargando(true);
     try {
       const esPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
       if (esPdf) {
@@ -3717,7 +3728,7 @@ function NutriciónPlugin({ patient }) {
         setPaginas([{ url: base64, base64 }]);
       }
     } catch (err) {
-      setResultado("No pude abrir el archivo: " + (err.message || err));
+      setError("No pude abrir el archivo: " + (err.message || err));
     } finally {
       setCargando(false);
     }
@@ -3725,20 +3736,32 @@ function NutriciónPlugin({ patient }) {
 
   async function analizar() {
     if (!paginas.length) return;
-    setAnalyzing(true); setResultado("");
+    setAnalyzing(true); setError(""); setFilas([]);
     try {
-      const systemPrompt = "Lee la imagen, que es una tabla de datos. Para cada fila indica: el nombre, su rango de referencia, el valor medido, y si el valor queda dentro o fuera de ese rango. Solo describe lo que aparece en la tabla, de forma clara y ordenada, en español. No agregues interpretaciones ni recomendaciones. Termina con esta sola línea: Esto es solo una lectura de los datos de la hoja, no un diagnóstico.";
-      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Son " + paginas.length + " página(s). Junta todas las filas de todas las páginas en una sola tabla clara y ordenada, en español. No agregues recomendaciones ni interpretaciones.";
+      const systemPrompt = "Eres un lector de tablas. La imagen es un reporte con una tabla de datos. Devuelve UNICAMENTE un JSON valido, sin markdown ni texto extra, con esta forma exacta: {\"filas\":[{\"sistema\":\"\",\"item\":\"\",\"rango\":\"\",\"valor\":\"\"}]}. Incluye TODAS las filas de TODAS las paginas. 'sistema' es la categoria o sistema, 'item' es el nombre del elemento de prueba, 'rango' es el rango normal tal cual aparece, 'valor' es la medicion tal cual aparece. No agregues interpretaciones ni recomendaciones.";
+      const userMsg = "Reporte de biorresonancia" + (patient ? " del paciente " + patient.nombre + " " + (patient.apellido || "") : "") + ". Son " + paginas.length + " pagina(s). Junta todas las filas de todas las paginas en una sola lista.";
       const contenido = [{ type: "text", text: userMsg }, ...paginas.map(p => ({ type: "image_url", image_url: { url: p.base64 } }))];
       const text = await CoreServices.askAI([{ role: "user", content: contenido }], systemPrompt);
-      setResultado(text || "No recibí respuesta. Intenta de nuevo.");
+      const data = JSON.parse((text || "{}").replace(/```json|```/g, "").trim());
+      const lista = (data.filas || []).map(f => ({
+        sistema: f.sistema || "",
+        item: f.item || "",
+        rango: f.rango || "",
+        valor: f.valor || "",
+        estado: calcularEstado(f.rango, f.valor),
+      }));
+      if (!lista.length) setError("No pude leer filas del reporte. Intenta con una foto o PDF más nítido.");
+      setFilas(lista);
     } catch (e) {
-      setResultado("Hubo un error al analizar: " + (e.message || e));
+      setError("Hubo un error al analizar: " + (e.message || e));
     } finally { setAnalyzing(false); }
   }
 
+  const th = { textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, borderBottom: "1px solid " + C.border, background: "rgba(255,255,255,0.03)" };
+  const td = { padding: "9px 12px", fontSize: 13, color: C.text, borderBottom: "1px solid " + C.border, verticalAlign: "top" };
+
   return (
-    <div style={{ padding: 24, maxWidth: 700 }}>
+    <div style={{ padding: 24, maxWidth: 820 }}>
       <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, marginTop: 0 }}>🧬 Nutrición</h2>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Lectura ordenada de los datos del reporte - no reemplaza análisis de laboratorio.</div>
       <div onClick={() => fileRef.current && fileRef.current.click()} style={{ background: C.surface, border: "2px dashed " + C.border, borderRadius: 16, padding: 28, textAlign: "center", marginBottom: 16, cursor: "pointer" }}>
@@ -3750,7 +3773,40 @@ function NutriciónPlugin({ patient }) {
       {cargando && <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Abriendo el archivo…</div>}
       {paginas.map((p, i) => <img key={i} src={p.url} alt={"reporte " + (i + 1)} style={{ width: "100%", borderRadius: 12, border: "1px solid " + C.border, marginBottom: 8 }} />)}
       {paginas.length > 0 && <button onClick={analizar} disabled={analyzing} style={{ background: C.teal, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginTop: 8, marginBottom: 16 }}>{analyzing ? "Analizando con Alex..." : "🧠 Analizar con Alex"}</button>}
-      {resultado && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 18, fontSize: 14, color: C.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{resultado}</div>}
+      {error && <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, fontSize: 13, color: C.danger, marginBottom: 16 }}>{error}</div>}
+      {filas.length > 0 && (
+        <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={th}>Sistema</th>
+                  <th style={th}>Ítem</th>
+                  <th style={th}>Rango normal</th>
+                  <th style={th}>Valor</th>
+                  <th style={th}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f, i) => (
+                  <tr key={i}>
+                    <td style={td}>{f.sistema}</td>
+                    <td style={td}>{f.item}</td>
+                    <td style={td}>{f.rango}</td>
+                    <td style={td}>{f.valor}</td>
+                    <td style={td}>
+                      {f.estado === "dentro" && <span style={{ fontSize: 11, fontWeight: 700, color: C.success, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 20, padding: "2px 10px" }}>Dentro</span>}
+                      {f.estado === "fuera" && <span style={{ fontSize: 11, fontWeight: 700, color: C.danger, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, padding: "2px 10px" }}>Fuera</span>}
+                      {!f.estado && <span style={{ fontSize: 12, color: C.muted }}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {filas.length > 0 && <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Esto es solo una lectura de los datos de la hoja, no un diagnóstico.</div>}
     </div>
   );
 }
