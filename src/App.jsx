@@ -4159,7 +4159,7 @@ function CopilotoConImagenes({ patient }) {
   );
 }
 
-function FuerzaMuscularPlugin({ patient }) {
+function FuerzaMuscularPluginViejo({ patient }) {
   const { C } = useApp();
   const [imagen, setImagen] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -4329,7 +4329,7 @@ function FuerzaMuscularPlugin({ patient }) {
   );
 }
 
-function FuerzaMuscularPlugin({ patient }) {
+function FuerzaMuscularPluginViejo({ patient }) {
   const { C } = useApp();
   const [imagen, setImagen] = useState(null);
   const [cargando, setCargando] = useState(false);
