@@ -4140,6 +4140,7 @@ function CopilotoConImagenes({ patient }) {
 
 const pluginRegistry = [
   { id: "fuerza", name: "Fuerza Muscular", icon: "💪", color: DS.colors.warning, group: "devices", description: "Masa muscular FITTO", component: FuerzaMuscularPlugin, patientAction: true, patientActionLabel: "Fuerza", onPatientAction: (p, nav) => nav("fuerza", p) },
+  { id: "fuerza", name: "Fuerza Muscular", icon: "💪", color: DS.colors.warning, group: "devices", description: "Masa muscular FITTO", component: FuerzaMuscularPlugin, patientAction: true, patientActionLabel: "Fuerza", onPatientAction: (p, nav) => nav("fuerza", p) },
   { id: "dashboard", name: "Dashboard", icon: "📊", color: DS.colors.primary, group: "clinical", description: "Vista general clínica", component: DashboardPlugin },
   { id: "patients", name: "Pacientes", icon: "👥", color: DS.colors.teal, group: "clinical", description: "Gestión de pacientes", component: PatientsPlugin },
   { id: "flir", name: "Termografía FLIR", icon: "🌡️", color: DS.colors.thermo, group: "devices", badge: "SDK", description: "Cámara térmica y galería", component: FLIRPlugin, patientAction: true, patientActionLabel: "Termografía", onPatientAction: (p, nav) => nav("flir", p) },
