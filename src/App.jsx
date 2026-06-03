@@ -4134,7 +4134,7 @@ const MUSCULOS_FITTO = [{ id: "pectoral_der", nombre: "Pectoral mayor derecho", 
           </div>
           <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 16, padding: 16, marginBottom: 14 }}>
             <MuncoFrente datos={datos} C={C} />
-            <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "0 auto" }}>
+            <div style={{ display: "none", position: "relative", width: "100%", maxWidth: 240, margin: "0 auto" }}>
               <svg viewBox="0 0 220 470" style={{ width: "100%", display: "block" }}>
                 <circle cx="110" cy="42" r="27" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
                 <rect x="98" y="64" width="24" height="20" rx="8" fill="rgba(45,212,191,0.12)" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5" />
