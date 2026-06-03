@@ -4044,7 +4044,7 @@ const MUSCULOS_FITTO = [{ id: "pectoral_der", nombre: "Pectoral mayor derecho", 
     }
     setAnalyzing(false);
     if (!d || Object.keys(d).length === 0) { setError("No pude leer los datos. Intenta con una captura mas nitida."); return; }
-    setDatos(d);
+    setDatos({ ...d, deltoides_ant_izq: d.brazo_izq, biceps_izq: d.brazo_izq, antebrazo_izq: d.brazo_izq, deltoides_ant_der: d.brazo_der, biceps_der: d.brazo_der, antebrazo_der: d.brazo_der, cuadriceps_izq: d.pierna_izq, tibial_izq: d.pierna_izq, cuadriceps_der: d.pierna_der, tibial_der: d.pierna_der });
 
     setGenerando(true);
     try {
