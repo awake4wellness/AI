@@ -3859,7 +3859,7 @@ const systemPrompt = "Eres un lector de tablas. La imagen es una pagina de un re
           </div>
         </div>
       )}
-      {filas.length > 0 && <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Esto es solo una lectura de los datos de la hoja, no un diagnóstico.</div>}
+     {filas.length > 0 && <button onClick={async () => { if (!patient || !patient.id) { alert("Abre Nutrición desde un paciente para poder guardar."); return; } const cab = "Sistema | Ítem | Rango normal | Valor | Estado"; const lineas = filas.map(f => (f.sistema || "") + " | " + (f.item || "") + " | " + (f.rango || "") + " | " + (f.valor || "") + " | " + (f.estado === "dentro" ? "Dentro" : f.estado === "fuera" ? "Fuera" : "—")); const notas = cab + "\n" + lineas.join("\n"); const r = await CoreServices.insert("sessions", { paciente_id: patient.id, protocolo: "Nutrición", notas: notas, foto: "", fecha: new Date().toISOString() }); if (r.error) { alert("No se pudo guardar: " + (r.error.message || "error")); } else { alert("Guardado en la historia del paciente ✓"); } }} style={{ background: C.success, border: "none", color: "#fff", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", width: "100%", marginBottom: 12 }}>💾 Guardar en la historia del paciente</button>}{filas.length > 0 && <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Esto es solo una lectura de los datos de la hoja, no un diagnóstico.</div>}
     </div>
   );
 }
