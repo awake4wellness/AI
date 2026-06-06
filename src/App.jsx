@@ -4294,7 +4294,7 @@ function LoginScreen({ onLogin }) {
   async function entrar() {
     setLoading(true); setError("");
     try {
-      await CoreServices.signIn(email, pass);
+      const d = await CoreServices.signIn(email, pass); if (!d || !d.access_token) { setError("Correo o contraseña incorrectos."); setLoading(false); return; }
       const user = { email, id: "demo", rol };
       localStorage.setItem("a4w_user", JSON.stringify(user));
       onLogin(user);
