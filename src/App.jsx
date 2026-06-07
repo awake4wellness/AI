@@ -2239,7 +2239,7 @@ Devuelve los 3 resultados más relevantes:
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div style={{ background: C.successDim, border: `1px solid ${C.success}25`, borderRadius: 12, padding: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: C.success, marginBottom: 8 }}>✅ ESTADO EN LA IA</div>
-                    <div style={{ fontSize: 12, color: C.text }}>Este libro está activo y disponible para el Copiloto IA. Las respuestas clínicas lo citan automáticamente cuando es relevante.</div>
+                    <div style={{ fontSize: 12, color: C.text }}>Este libro está activo y disponible para el ALEX. Las respuestas clínicas lo citan automáticamente cuando es relevante.</div>
                   </div>
                   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 10 }}>PERMISOS</div>
@@ -2984,7 +2984,7 @@ function AnalyticsPlugin({patients,sessions}) {
 
       {tab==="protos"&&(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:14}}>
-          {[{n:"HILT Láser",icon:"⚡",c:C.warning,sessions:12,success:87},{n:"Crioterapia",icon:"❄️",c:C.primary,sessions:8,success:91},{n:"Termografía",icon:"🌡️",c:C.thermo,sessions:20,success:100},{n:"Rehabilitación",icon:"💪",c:C.orange,sessions:15,success:78},{n:"Copiloto IA",icon:"🧠",c:C.success,sessions:30,success:95},{n:"BioWave",icon:"🔌",c:C.purple,sessions:5,success:70}].map(p=>(
+          {[{n:"HILT Láser",icon:"⚡",c:C.warning,sessions:12,success:87},{n:"Crioterapia",icon:"❄️",c:C.primary,sessions:8,success:91},{n:"Termografía",icon:"🌡️",c:C.thermo,sessions:20,success:100},{n:"Rehabilitación",icon:"💪",c:C.orange,sessions:15,success:78},{n:"ALEX",icon:"🧠",c:C.success,sessions:30,success:95},{n:"BioWave",icon:"🔌",c:C.purple,sessions:5,success:70}].map(p=>(
             <Card key={p.n} color={p.c}>
               <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:14}}>
                 <div style={{width:40,height:40,borderRadius:10,background:`${p.c}15`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{p.icon}</div>
@@ -3142,7 +3142,7 @@ function PaymentsPlugin() {
   const [tab,setTab] = useState("plans");
   const plans = [
     {name:"Starter",price:149,color:C.muted,features:["3 pacientes activos","Historia clínica digital","Protocolos básicos","Sin IA clínica","Sin FLIR"],popular:false},
-    {name:"Professional",price:299,color:C.primary,features:["25 pacientes activos","Copiloto IA","Cámara FLIR integrada","Motor Central Dx","Telemedicina","Analytics avanzados"],popular:true},
+    {name:"Professional",price:299,color:C.primary,features:["25 pacientes activos","ALEX","Cámara FLIR integrada","Motor Central Dx","Telemedicina","Analytics avanzados"],popular:true},
     {name:"Clinic",price:599,color:C.purple,features:["Pacientes ilimitados","Todo Professional","Multi-clínica","InBody + VALD + Bodygee","White-label","Soporte prioritario"],popular:false},
     {name:"Franchise",price:"custom",color:C.warning,features:["Modelo franquicia","Revenue sharing","Training completo","Territorio exclusivo","EB2-NIW support","Marketing"],popular:false},
   ];
@@ -3888,7 +3888,7 @@ function CopilotoTextoAntiguo({ patient }) {
   }
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <h2 style={{ color: C.text, fontSize: 20, marginBottom: 4 }}>🧠 Copiloto IA — Alex</h2>
+      <h2 style={{ color: C.text, fontSize: 20, marginBottom: 4 }}>🧠 ALEX — Alex</h2>
       <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Asistente clínico</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
         {msgs.map((m, i) => (
@@ -3951,7 +3951,7 @@ function CopilotoConImagenes({ patient }) {
   }
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }}>
-      <h2 style={{ color: C.text, fontSize: 20, marginBottom: 4 }}>🧠 Copiloto IA — Alex</h2>
+      <h2 style={{ color: C.text, fontSize: 20, marginBottom: 4 }}>🧠 ALEX — Alex</h2>
       <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Asistente clínico · acepta imágenes</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
         {msgs.map((m, i) => (
@@ -4167,7 +4167,7 @@ function ReportePlugin({ patient }) { const { C } = useApp(); const [pdfUrl, set
   { id: "dashboard", name: "Dashboard", icon: "📊", color: DS.colors.primary, group: "clinical", description: "Vista general clínica", component: DashboardPlugin },
   { id: "patients", name: "Pacientes", icon: "👥", color: DS.colors.teal, group: "clinical", description: "Gestión de pacientes", component: PatientsPlugin },
   { id: "flir", name: "Termografía FLIR", icon: "🌡️", color: DS.colors.thermo, group: "devices", badge: "SDK", description: "Cámara térmica y galería", component: FLIRPlugin, patientAction: true, patientActionLabel: "Termografía", onPatientAction: (p, nav) => nav("flir", p) },
-  { id: "copilot", name: "Copiloto IA", icon: "🧠", color: DS.colors.success, group: "ai", badge: "IA", description: "Asistente clínico Alex", component: CopilotoConImagenes, patientAction: true, patientActionLabel: "Copiloto", onPatientAction: (p, nav) => nav("copilot", p) },
+  { id: "copilot", name: "ALEX", icon: "🧠", color: DS.colors.success, group: "ai", badge: "IA", description: "Asistente clínico Alex", component: CopilotoConImagenes, patientAction: true, patientActionLabel: "Copiloto", onPatientAction: (p, nav) => nav("copilot", p) },
   { id: "biorresonancia", name: "Nutrición", icon: "🧬", color: DS.colors.teal, group: "devices", description: "Reportes y orientación de bienestar", component: NutriciónPlugin, patientAction: true, patientActionLabel: "Nutrición", onPatientAction: (p, nav) => nav("biorresonancia", p) }, { id: "devices", name: "Dispositivos", icon: "🔌", color: DS.colors.primary, group: "devices", description: "Hub de integraciones", component: DevicesPlugin },
   { id: "inbody", name: "InBody", icon: "⚖️", color: DS.colors.primary, group: "devices", description: "Composición corporal", component: () => <PlaceholderPlugin name="InBody" icon="⚖️" description="Integración de composición corporal (LookinBody WebAPI + CSV)." coming />, patientAction: true, patientActionLabel: "InBody", onPatientAction: (p, nav) => nav("inbody", p) },
   { id: "vald", name: "VALD", icon: "💪", color: DS.colors.warning, group: "devices", description: "Fuerza y rendimiento", component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración de fuerza y rendimiento vía REST API (OAuth2)." coming />, patientAction: true, patientActionLabel: "VALD", onPatientAction: (p, nav) => nav("vald", p) },
