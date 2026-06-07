@@ -311,7 +311,7 @@ export const CoreServices = {
     if (IS_DEMO) { localStorage.setItem("a4w_user", JSON.stringify({ email, id: "demo" })); return { user: { email, id: "demo" } }; }
     const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY }, body: JSON.stringify({ email, password: pass }) });
     const d = await r.json();
-    if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_user", JSON.stringify(d.user)); }
+    if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_user", JSON.stringify(d.user)); localStorage.setItem("a4w_refresh", d.refresh_token || ""); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); }
     return d;
   },
   signOut() { localStorage.removeItem("a4w_token"); localStorage.removeItem("a4w_user"); },
