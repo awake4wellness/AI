@@ -950,7 +950,7 @@ function HistoriaClinicaV3({ patient, C }) {
     { id: "s10", label: "📈 Seguimiento" },
   ];
 
-     const { set: publicarHc } = useClinicalRecord(patient);
+     const { set: publicarHc } = useClinicalRecord(patient); const [cargadoHc, setCargadoHc] = useState(false); useEffect(() => { let vivo = true; if (patient && patient.id) { CoreServices.query("clinical_records", { paciente_id: patient.id }).then(({ data }) => { if (!vivo) return; if (data && data[0] && data[0].datos) setHc(prev => ({ ...prev, ...data[0].datos })); setCargadoHc(true); }); } else { setCargadoHc(true); } return () => { vivo = false; }; }, [patient && patient.id]); useEffect(() => { if (!cargadoHc || !patient || !patient.id) return; const t = setTimeout(() => { fetch(SUPABASE_URL + "/rest/v1/clinical_records?on_conflict=paciente_id", { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": "Bearer " + (CoreServices.getToken() || SUPABASE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify([{ paciente_id: patient.id, datos: hc, updated_at: new Date().toISOString() }]) }).catch(() => {}); }, 1500); return () => clearTimeout(t); }, [hc, cargadoHc, patient && patient.id]);
      useEffect(() => { publicarHc(hc); }, [hc]);
 
      function autoFillFromVoice(data) {
