@@ -617,7 +617,7 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
           <Input label="Email" value={form.email} onChange={e => upd("email", e.target.value)} placeholder="carlos@email.com" />
 
           <div style={{ gridColumn: "1/-1" }}>
-            <Input label="Condición Principal" value={form.condicion_principal} onChange={e => upd("condicion_principal", e.target.value)} placeholder="Ej: Tendinopatía rotuliana, Dolor lumbar crónico..." />
+            <Input label="Condición Principal" value={form.condicion_principal} onChange={e => upd("condicion_principal", e.target.value)} placeholder="Ej: Tendinopatía rotuliana, Dolor lumbar crónico..." /><div style={{ marginTop: 14 }}><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 8 }}>País</label><div style={{ display: "flex", gap: 8 }}>{["USA", "Colombia"].map(o => (<button key={o} onClick={() => upd("pais", o)} style={{ flex: 1, padding: "11px 8px", borderRadius: 10, border: `1px solid ${form.pais === o ? `${C.teal}50` : C.border}`, background: form.pais === o ? "rgba(45,212,191,0.15)" : "rgba(255,255,255,0.03)", color: form.pais === o ? C.teal : C.muted, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{o}</button>))}</div></div>
           </div>
 
           <Input label="Deporte principal" value={form.deporte} onChange={e => upd("deporte", e.target.value)} placeholder="Ej: Tenis, Pickleball, Golf..." />
