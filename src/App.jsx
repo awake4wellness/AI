@@ -314,14 +314,14 @@ export const CoreServices = {
     if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_user", JSON.stringify(d.user)); localStorage.setItem("a4w_refresh", d.refresh_token || ""); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); }
     return d;
   },
-  signOut() { localStorage.removeItem("a4w_token"); localStorage.removeItem("a4w_user"); },
+  signOut() { localStorage.removeItem("a4w_token"); localStorage.removeItem("a4w_user"); localStorage.removeItem("a4w_refresh"); localStorage.removeItem("a4w_expires"); },
   getUser() { try { return JSON.parse(localStorage.getItem("a4w_user")); } catch { return null; } },
-  getToken() { return localStorage.getItem("a4w_token"); },
+  getToken() { return localStorage.getItem("a4w_token"); }, async getValidToken() { const exp = Number(localStorage.getItem("a4w_expires") || 0); const tok = localStorage.getItem("a4w_token"); if (tok && Date.now() < exp - 60000) return tok; const rt = localStorage.getItem("a4w_refresh"); if (!rt) return tok; if (!this._refreshPromise) { this._refreshPromise = fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY }, body: JSON.stringify({ refresh_token: rt }) }).then(r => r.json()).then(d => { if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_refresh", d.refresh_token || rt); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); } this._refreshPromise = null; return d.access_token || tok; }).catch(() => { this._refreshPromise = null; return tok; }); } return this._refreshPromise; },
 
   // Database
   async query(table, filters = {}, cols = "*") {
     if (IS_DEMO) return { data: [], error: null };
-    const token = this.getToken();
+    const token = await this.getValidToken();
     const params = Object.entries(filters).map(([k, v]) => `${k}=eq.${v}`).join("&");
     const url = `${SUPABASE_URL}/rest/v1/${table}?select=${cols}${params ? "&" + params : ""}`;
     const r = await fetch(url, { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}` } });
@@ -330,16 +330,16 @@ export const CoreServices = {
   },
   async insert(table, body) {
     if (IS_DEMO) return { data: [{ ...body, id: Date.now().toString() }], error: null };
-    const token = this.getToken();
+    const token = await this.getValidToken();
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Prefer": "return=representation" }, body: JSON.stringify(Array.isArray(body) ? body : [body]) });
     const d = await r.json();
-    return { data: d, error: r.ok ? null : d }; }, async update(table, id, body) { const token = this.getToken(); const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Prefer": "return=representation" }, body: JSON.stringify(body) }); const d = await r.json(); return { data: d, error: r.ok ? null : d };
+    return { data: d, error: r.ok ? null : d }; }, async update(table, id, body) { const token = await this.getValidToken(); const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Prefer": "return=representation" }, body: JSON.stringify(body) }); const d = await r.json(); return { data: d, error: r.ok ? null : d };
   },
 
   // Storage (for images)
   async uploadFile(bucket, path, file) {
     if (IS_DEMO) return { url: URL.createObjectURL(file), error: null };
-    const token = this.getToken();
+    const token = await this.getValidToken();
     const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, { method: "POST", headers: { "Authorization": `Bearer ${token || SUPABASE_KEY}`, "apikey": SUPABASE_KEY }, body: file });
     const d = await r.json();
     return { url: `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`, error: d.error || null };
