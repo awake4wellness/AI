@@ -657,30 +657,60 @@ function useSpeechRecognition() {
   const [transcript, setTranscript] = useState("");
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
+  const [micError, setMicError] = useState("");
   const recRef = useRef(null);
+  const wantRef = useRef(false);
+  const baseRef = useRef("");
 
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SR) {
-      setSupported(true);
-      const rec = new SR();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "es-ES";
-      rec.onresult = (e) => {
-        let full = "";
-        for (let i = 0; i < e.results.length; i++) full += e.results[i][0].transcript + " ";
-        setTranscript(full.trim());
-      };
-      rec.onend = () => setListening(false);
-      recRef.current = rec;
-    }
+    if (!SR) { setSupported(false); return; }
+    setSupported(true);
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "es-ES";
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) baseRef.current += t + " ";
+        else interim += t;
+      }
+      setTranscript((baseRef.current + interim).trim());
+    };
+    rec.onerror = (ev) => {
+      if (ev && (ev.error === "not-allowed" || ev.error === "service-not-allowed")) {
+        wantRef.current = false; setListening(false);
+        setMicError("El micrófono está bloqueado. Permite el acceso al micrófono en el navegador y vuelve a intentar.");
+      }
+    };
+    rec.onend = () => {
+      if (wantRef.current) { try { rec.start(); } catch (e) {} }
+      else setListening(false);
+    };
+    recRef.current = rec;
+    return () => { wantRef.current = false; try { rec.stop(); } catch (e) {} };
   }, []);
 
-  function start() { if (recRef.current) { setTranscript(""); recRef.current.start(); setListening(true); } }
-  function stop() { if (recRef.current) { recRef.current.stop(); setListening(false); } }
+  function start() {
+    if (!recRef.current) return;
+    setMicError(""); baseRef.current = ""; setTranscript("");
+    wantRef.current = true; setListening(true);
+    try { recRef.current.start(); } catch (e) {}
+  }
+  function resume() {
+    if (!recRef.current) return;
+    setMicError(""); wantRef.current = true; setListening(true);
+    try { recRef.current.start(); } catch (e) {}
+  }
+  function stop() {
+    wantRef.current = false; setListening(false);
+    if (recRef.current) { try { recRef.current.stop(); } catch (e) {} }
+  }
+  function setTranscriptManual(v) { baseRef.current = (v ? v + " " : ""); setTranscript(v || ""); }
 
-  return { transcript, listening, supported, start, stop, setTranscript };
+  return { transcript, listening, supported, micError, start, resume, stop, setTranscript: setTranscriptManual };
 }
 
 async function analizarConsultaIA(transcript, patient) {
@@ -716,6 +746,82 @@ Devuelve exactamente esta estructura JSON:
   } catch {
     return null;
   }
+}
+
+function ConsultaPorVoz({ patient, onAutoFill, C }) {
+  const { transcript, listening, supported, micError, start, resume, stop, setTranscript } = useSpeechRecognition();
+  const [abierto, setAbierto] = useState(false);
+  const [fase, setFase] = useState("idle");
+  const [resumen, setResumen] = useState("");
+  const PREGUNTAS = [
+    "¿Cuál es el motivo principal de la consulta?",
+    "¿Dónde le duele exactamente? (localización)",
+    "Del 1 al 10, ¿qué tan fuerte es el dolor? (EVA)",
+    "¿Cuándo empezó el problema?",
+    "¿Cómo ha evolucionado desde que empezó?",
+    "¿Qué actividades o posturas lo empeoran?",
+    "¿Qué lo alivia?",
+    "¿Ha recibido tratamientos antes? ¿Cuáles?",
+    "Antecedentes: médicos, cirugías, traumatismos, alergias",
+    "¿Practica algún deporte o actividad física?",
+  ];
+  function abrir() { setAbierto(true); setFase("idle"); setTranscript(""); setResumen(""); }
+  function cerrar() { stop(); setAbierto(false); setFase("idle"); }
+  function iniciar() { if (transcript.trim()) { resume(); } else { start(); } setFase("grabando"); }
+  function pausar() { stop(); setFase("idle"); }
+  async function alimentar() {
+    stop(); setFase("procesando");
+    try {
+      const res = await analizarConsultaIA(transcript, patient);
+      if (res) { onAutoFill(res); setResumen(res.resumen || "Historia clínica actualizada con lo dictado."); }
+      else setResumen("No se obtuvo respuesta de la IA.");
+      setFase("listo");
+    } catch (e) { setResumen("No se pudo procesar (revisa la conexión de la IA): " + (e.message || e)); setFase("listo"); }
+  }
+  if (!supported) {
+    return (<div style={{ background: C.warningDim, border: "1px solid " + C.warning + "30", borderRadius: 12, padding: 14, marginBottom: 16, fontSize: 13, color: C.warning }}>⚠️ Tu navegador no soporta dictado por voz. Usa Chrome o Edge actualizado.</div>);
+  }
+  return (
+    <>
+      <button onClick={abrir} style={{ width: "100%", padding: "14px", borderRadius: 12, background: "rgba(45,212,191,0.12)", border: "1px solid " + C.teal + "55", color: C.teal, fontSize: 15, fontWeight: 800, cursor: "pointer", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>🎤 Consulta por voz (pantalla grande)</button>
+      {abierto && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(6,11,22,0.97)", display: "flex", flexDirection: "column", padding: 24, boxSizing: "border-box" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>🎤 Consulta por voz</div>
+              <div style={{ fontSize: 12, color: C.muted }}>{patient ? (patient.nombre + " " + (patient.apellido || "")) : ""} · dicta de corrido; al final alimenta la historia</div>
+            </div>
+            <button onClick={cerrar} style={{ background: "transparent", border: "1px solid " + C.border, color: C.muted, borderRadius: 10, padding: "8px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>✕ Cerrar</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 20, flex: 1, minHeight: 0 }}>
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid " + C.border, borderRadius: 14, padding: 18, overflowY: "auto" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>PREGUNTAS GUÍA</div>
+              {PREGUNTAS.map((q, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12, fontSize: 14, color: C.text, lineHeight: 1.4 }}>
+                  <span style={{ color: C.teal, fontWeight: 800 }}>{i + 1}.</span><span>{q}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+                {fase !== "grabando"
+                  ? <button onClick={iniciar} style={{ padding: "14px 24px", borderRadius: 12, background: "rgba(239,68,68,0.15)", border: "1px solid " + C.danger + "55", color: C.danger, fontSize: 16, fontWeight: 800, cursor: "pointer" }}>🎙️ {transcript.trim() ? "Seguir dictando" : "Empezar a dictar"}</button>
+                  : <button onClick={pausar} style={{ padding: "14px 24px", borderRadius: 12, background: C.danger, border: "none", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer" }}>⏸️ Pausar</button>}
+                {fase === "grabando" && <span style={{ display: "flex", alignItems: "center", gap: 8, color: C.danger, fontSize: 13, fontWeight: 700 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: C.danger, animation: "pulse 1s infinite" }} />Escuchando...</span>}
+                {micError && <span style={{ color: C.warning, fontSize: 12 }}>{micError}</span>}
+              </div>
+              <textarea value={transcript} onChange={e => setTranscript(e.target.value)} placeholder="Aquí aparece lo que se va dictando. Puedes corregir el texto a mano antes de alimentar la historia." style={{ flex: 1, minHeight: 0, width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.03)", border: "1px solid " + C.border, borderRadius: 14, color: C.text, fontSize: 16, lineHeight: 1.7, padding: 16, resize: "none", fontFamily: "inherit" }} />
+              <div style={{ display: "flex", gap: 12, marginTop: 14 }}>
+                <button onClick={() => setTranscript("")} style={{ padding: "12px 18px", borderRadius: 10, background: "transparent", border: "1px solid " + C.border, color: C.muted, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>🗑️ Limpiar</button>
+                <button onClick={alimentar} disabled={!transcript.trim() || fase === "procesando"} style={{ flex: 1, padding: "14px", borderRadius: 12, background: (transcript.trim() && fase !== "procesando") ? C.success : "rgba(255,255,255,0.05)", border: "none", color: (transcript.trim() && fase !== "procesando") ? "#fff" : C.muted, fontSize: 15, fontWeight: 800, cursor: (transcript.trim() && fase !== "procesando") ? "pointer" : "not-allowed" }}>{fase === "procesando" ? "🧠 Analizando con IA..." : "✓ Alimentar historia clínica"}</button>
+              </div>
+              {fase === "listo" && resumen && (<div style={{ marginTop: 12, background: "rgba(16,185,129,0.12)", border: "1px solid " + C.success + "40", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: C.text }}>✓ {resumen} <button onClick={cerrar} style={{ marginLeft: 10, background: "transparent", border: "none", color: C.teal, fontWeight: 700, cursor: "pointer" }}>Cerrar y revisar la historia</button></div>)}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function DictadoClinico({ patient, onAutoFill, C }) {
@@ -989,7 +1095,8 @@ function HistoriaClinicaV3({ patient, C }) {
       </div>
 
       <div>
-        <DictadoClinico patient={patient} onAutoFill={autoFillFromVoice} C={C} />
+        <ConsultaPorVoz patient={patient} onAutoFill={autoFillFromVoice} C={C} />
+<DictadoClinico patient={patient} onAutoFill={autoFillFromVoice} C={C} />
         {seccion === "s1" && <div>
           {sec("1. DATOS DEL PACIENTE")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
