@@ -2857,6 +2857,27 @@ function MotorCentralPlugin({patient}) {
   const {C} = useApp();
   const { update: _updHc } = useClinicalRecord(patient);
   const [guardado,setGuardado]=useState(false);
+  const { transcript: mcVoz, listening: mcListen, supported: mcVozOk, start: mcStart, resume: mcResume, stop: mcStop, setTranscript: mcSet } = useSpeechRecognition();
+  const [mcAbierto,setMcAbierto]=useState(false);
+  const [mcFase,setMcFase]=useState("idle");
+  const [mcMsg,setMcMsg]=useState("");
+  async function alimentarMotorVoz(){
+    mcStop(); setMcFase("procesando"); setMcMsg("");
+    try{
+      const sp="Eres Alex, asistente clínico de Awake4Wellness. Extraes datos para el Motor Central desde la transcripción de una consulta. Respondes SOLO con JSON válido, sin markdown. Solo incluye un valor si la transcripción lo menciona; si no, usa null.";
+      const um="TRANSCRIPCION:\n\""+mcVoz+"\"\n\nDevuelve este JSON: {\"eva\":(0 a 10 o null),\"sueno\":{\"psqi\":num,\"isi\":num,\"epworth\":num},\"vertigo\":{\"dhi\":num,\"dix_hallpike\":\"positivo|negativo\",\"red_flags\":true|false},\"termografia\":{\"tsi\":\"caliente|frio|neutro\",\"asimetria\":num},\"neuro\":{\"dolor_persistente\":true|false,\"trigger_points\":true|false,\"fiebre\":true|false,\"esfinteres\":true|false}}";
+      const txt=await CoreServices.askAI([{role:"user",content:um}],sp);
+      const data=JSON.parse((txt||"{}").replace(/```json|```/g,"").trim());
+      const limpio=(o)=>Object.fromEntries(Object.entries(o||{}).filter(([k,v])=>v!==null&&v!==undefined&&v!==""));
+      if(data.eva!==null&&data.eva!==undefined) setEva(Number(data.eva)||0);
+      if(data.sueno) setSueno(s=>({...s,...limpio(data.sueno)}));
+      if(data.vertigo) setVertigo(v=>({...v,...limpio(data.vertigo)}));
+      if(data.termografia) setTermo(t=>({...t,...limpio(data.termografia)}));
+      if(data.neuro) setNeuro(n=>({...n,...limpio(data.neuro)}));
+      setMcMsg("Listo: llené lo que se mencionó (EVA, sueño, vértigo, termografía, neuromodulación). Revisa cada módulo y ejecuta el diagnóstico.");
+      setMcFase("listo");
+    }catch(e){ setMcMsg("No se pudo procesar (revisa la IA): "+(e.message||e)); setMcFase("listo"); }
+  }
   async function guardarEnHistoria(res){
     if(!patient||!patient.id){alert("Abre Motor Central desde un paciente para poder guardar.");return;}
     const datosMotor={ eva, termografia:{...termo}, psqi:sueno.psqi, isi:sueno.isi, epworth:sueno.epworth, dhi:vertigo.dhi, dix_hallpike:vertigo.dix_hallpike, cadenas, endocrino, nutricion_def:nutricion.deficiencias, neuro, motor_central:{ capturado:{eva,lesiones,termo,sueno,vertigo,cadenas,endocrino,nutricion,neuro}, resultado:res, fecha:new Date().toISOString() } };
@@ -3062,18 +3083,40 @@ function MotorCentralPlugin({patient}) {
           {protos.map(p=><div key={p.id} style={{background:`${p.c}10`,border:`1px solid ${p.c}25`,borderRadius:8,padding:"8px 12px",fontSize:12,fontWeight:700,color:p.c}}>{p.l}</div>)}
         </div>
         {resultado.alertas.length>0&&<div style={{marginTop:12,background:C.warningDim,border:`1px solid ${C.warning}25`,borderRadius:10,padding:12}}><div style={{fontSize:11,fontWeight:700,color:C.warning,marginBottom:6}}>ALERTAS</div>{resultado.alertas.map((a,i)=><div key={i} style={{fontSize:11,color:C.muted,marginBottom:3}}>• {a}</div>)}</div>}
-        <Btn onClick={()=>{setStep(0);setResultado(null);setLesiones({});setEva(0);}} color={C.primary} style={{width:"100%",marginTop:14}}>🔄 Nueva Evaluación</Btn>
+        <Btn onClick={()=>guardarEnHistoria(resultado)} color={C.success} style={{width:"100%",marginTop:14}}>{guardado?"✓ Guardado en la historia":"💾 Guardar en la historia clínica"}</Btn>
+        <Btn onClick={()=>{setStep(0);setResultado(null);setLesiones({});setEva(0);}} color={C.primary} style={{width:"100%",marginTop:10}}>🔄 Nueva Evaluación</Btn>
       </div>
     );
   }
 
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:20,height:"calc(100vh - 100px)",overflow:"hidden"}}>
+      {mcAbierto && (
+        <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(6,11,22,0.97)",display:"flex",flexDirection:"column",padding:24,boxSizing:"border-box"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div><div style={{fontSize:20,fontWeight:800,color:C.text}}>🎤 Llenar Motor Central por voz</div><div style={{fontSize:12,color:C.muted}}>Dicta lo que diga el paciente; la IA llena los módulos (EVA, sueño, vértigo, termografía, neuromodulación).</div></div>
+            <button onClick={()=>{mcStop();setMcAbierto(false);}} style={{background:"transparent",border:"1px solid "+C.border,color:C.muted,borderRadius:10,padding:"8px 16px",fontSize:14,fontWeight:700,cursor:"pointer"}}>✕ Cerrar</button>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12,flexWrap:"wrap"}}>
+            {!mcListen
+              ? <button onClick={()=>{ mcVoz.trim()?mcResume():mcStart(); }} style={{padding:"14px 24px",borderRadius:12,background:"rgba(239,68,68,0.15)",border:"1px solid "+C.danger+"55",color:C.danger,fontSize:16,fontWeight:800,cursor:"pointer"}}>🎙️ {mcVoz.trim()?"Seguir dictando":"Empezar a dictar"}</button>
+              : <button onClick={mcStop} style={{padding:"14px 24px",borderRadius:12,background:C.danger,border:"none",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer"}}>⏸️ Pausar</button>}
+            {mcListen && <span style={{display:"flex",alignItems:"center",gap:8,color:C.danger,fontSize:13,fontWeight:700}}><span style={{width:10,height:10,borderRadius:"50%",background:C.danger,animation:"pulse 1s infinite"}} />Escuchando...</span>}
+          </div>
+          <textarea value={mcVoz} onChange={e=>mcSet(e.target.value)} placeholder="Aquí aparece lo que se va dictando. Puedes corregir el texto a mano." style={{flex:1,minHeight:120,width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.03)",border:"1px solid "+C.border,borderRadius:14,color:C.text,fontSize:16,lineHeight:1.7,padding:16,resize:"none",fontFamily:"inherit"}} />
+          <div style={{display:"flex",gap:12,marginTop:14}}>
+            <button onClick={()=>mcSet("")} style={{padding:"12px 18px",borderRadius:10,background:"transparent",border:"1px solid "+C.border,color:C.muted,fontSize:14,fontWeight:700,cursor:"pointer"}}>🗑️ Limpiar</button>
+            <button onClick={alimentarMotorVoz} disabled={!mcVoz.trim()||mcFase==="procesando"} style={{flex:1,padding:"14px",borderRadius:12,background:(mcVoz.trim()&&mcFase!=="procesando")?C.success:"rgba(255,255,255,0.05)",border:"none",color:(mcVoz.trim()&&mcFase!=="procesando")?"#fff":C.muted,fontSize:15,fontWeight:800,cursor:(mcVoz.trim()&&mcFase!=="procesando")?"pointer":"not-allowed"}}>{mcFase==="procesando"?"🧠 Analizando...":"✓ Llenar módulos del Motor"}</button>
+          </div>
+          {mcFase==="listo"&&mcMsg&&<div style={{marginTop:12,background:"rgba(16,185,129,0.12)",border:"1px solid "+C.success+"40",borderRadius:10,padding:"12px 16px",fontSize:13,color:C.text}}>✓ {mcMsg} <button onClick={()=>{mcStop();setMcAbierto(false);}} style={{marginLeft:10,background:"transparent",border:"none",color:C.teal,fontWeight:700,cursor:"pointer"}}>Cerrar y revisar módulos</button></div>}
+        </div>
+      )}
       <div style={{overflowY:"auto"}}>
         <div style={{marginBottom:20}}>
           <h2 style={{margin:0,fontSize:20,fontWeight:800,color:C.text}}>🧠 Motor Central Diagnóstico</h2>
           <p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{patient?`${patient.nombre} ${patient.apellido} · `:""}9 módulos → 4 capas → Protocolo automático</p>
         </div>
+        <button onClick={()=>{ if(!mcVozOk){alert("Tu navegador no soporta dictado. Usa Chrome o Edge.");return;} setMcAbierto(true); setMcFase("idle"); mcSet(""); setMcMsg(""); }} style={{width:"100%",padding:"12px",borderRadius:12,background:"rgba(45,212,191,0.12)",border:"1px solid "+C.teal+"55",color:C.teal,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:16}}>🎤 Llenar Motor por voz</button>
         <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:20}}>
           {MODS.map((m,i)=><button key={m.id} onClick={()=>setStep(i)} style={{padding:"5px 10px",borderRadius:20,cursor:"pointer",fontSize:10,fontWeight:700,background:step===i?`${m.color}20`:i<step||step===MODS.length?"rgba(255,255,255,0.05)":"transparent",color:step===i?m.color:C.dim,border:`1px solid ${step===i?`${m.color}35`:"transparent"}`}}>{i<step||step===MODS.length?"✓ ":""}{m.label}</button>)}
         </div>
