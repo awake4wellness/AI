@@ -1579,7 +1579,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
           ))}
           <div style={{ gridColumn: "1/-1" }}>
             <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6 }}>Notas</label>
-            <textarea value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} rows={3} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 13, padding: "10px 14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{[["subjetivo","Subjetivo (S): lo que cuenta el paciente"],["objetivo","Objetivo (O): examen, hallazgos, mediciones"],["analisis","Análisis (A): tu impresión / diagnóstico"],["plan","Plan (P): tratamiento, indicaciones, próxima cita"]].map(([k,ph]) => (<textarea key={k} value={form[k]} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} placeholder={ph} rows={2} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 13, padding: "10px 14px", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />))}</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "flex-end" }}>
