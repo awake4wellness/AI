@@ -1436,6 +1436,95 @@ function HistoriaClinicaV3({ patient, C }) {
 }
 
 // ── PLUGIN: Patient Detail ─────────────────────────────────
+function EstudiosClinicos({ patient, C }) {
+  const TIPOS = [
+    { id: "valoracion_externa", l: "🩺 Valoración médico externo" },
+    { id: "rayos_x", l: "🩻 Rayos X" },
+    { id: "resonancia", l: "🧲 Resonancia (RMN)" },
+  ];
+  const [estudios, setEstudios] = useState([]);
+  const [cargado, setCargado] = useState(false);
+  const [tipo, setTipo] = useState("valoracion_externa");
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [centro, setCentro] = useState("");
+  const [hallazgos, setHallazgos] = useState("");
+  const [enlace, setEnlace] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    if (patient && patient.id) {
+      CoreServices.query("clinical_records", { paciente_id: patient.id }).then(({ data }) => {
+        if (!vivo) return;
+        const arr = (data && data[0] && data[0].datos && Array.isArray(data[0].datos.estudios)) ? data[0].datos.estudios : [];
+        setEstudios(arr); setCargado(true);
+      });
+    } else { setCargado(true); }
+    return () => { vivo = false; };
+  }, [patient && patient.id]);
+
+  async function persistir(nuevos) {
+    const prev = await CoreServices.query("clinical_records", { paciente_id: patient.id });
+    const base = (prev.data && prev.data[0] && prev.data[0].datos) ? prev.data[0].datos : {};
+    const merged = { ...base, estudios: nuevos };
+    await fetch(SUPABASE_URL + "/rest/v1/clinical_records?on_conflict=paciente_id", { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": "Bearer " + (CoreServices.getToken() || SUPABASE_KEY), "Prefer": "resolution=merge-duplicates" }, body: JSON.stringify([{ paciente_id: patient.id, datos: merged, updated_at: new Date().toISOString() }]) });
+  }
+
+  async function agregar() {
+    if (!patient || !patient.id) { alert("Abre Estudios desde un paciente."); return; }
+    if (!hallazgos && !enlace) { alert("Escribe los hallazgos o pega un enlace."); return; }
+    setGuardando(true);
+    const nuevo = { tipo, fecha, centro, hallazgos, enlace, creado: new Date().toISOString() };
+    const nuevos = [nuevo, ...estudios];
+    try { await persistir(nuevos); setEstudios(nuevos); setCentro(""); setHallazgos(""); setEnlace(""); }
+    catch (e) { alert("No se pudo guardar: " + (e.message || e)); }
+    finally { setGuardando(false); }
+  }
+
+  async function borrar(idx) {
+    const nuevos = estudios.filter((_, i) => i !== idx);
+    try { await persistir(nuevos); setEstudios(nuevos); } catch (e) { alert("No se pudo borrar: " + (e.message || e)); }
+  }
+
+  const inp = { width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid " + C.border, borderRadius: 8, color: C.text, fontSize: 14, padding: "8px 10px", fontFamily: "inherit", boxSizing: "border-box" };
+  const lTipo = (t) => (TIPOS.find(x => x.id === t) || {}).l || t;
+
+  return (
+    <div style={{ maxWidth: 760 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>ESTUDIOS Y VALORACIONES EXTERNAS</div>
+      <div style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 16, marginBottom: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div><div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Tipo</div>
+            <select value={tipo} onChange={e => setTipo(e.target.value)} style={inp}>{TIPOS.map(t => <option key={t.id} value={t.id}>{t.l}</option>)}</select></div>
+          <div><div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Fecha</div>
+            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} /></div>
+        </div>
+        <div style={{ marginBottom: 12 }}><div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Médico / Centro</div>
+          <input value={centro} onChange={e => setCentro(e.target.value)} placeholder="Dr. / Clínica que lo realizó" style={inp} /></div>
+        <div style={{ marginBottom: 12 }}><div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Hallazgos / Informe</div>
+          <textarea value={hallazgos} onChange={e => setHallazgos(e.target.value)} rows={3} placeholder="Resumen de los hallazgos del estudio o valoración" style={{ ...inp, resize: "vertical" }} /></div>
+        <div style={{ marginBottom: 12 }}><div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Enlace al archivo (PDF / imagen)</div>
+          <input value={enlace} onChange={e => setEnlace(e.target.value)} placeholder="Pega aquí el enlace (Drive, etc.)" style={inp} /></div>
+        <Btn onClick={agregar} disabled={guardando} color={C.success}>{guardando ? "Guardando..." : "➕ Agregar a la historia"}</Btn>
+      </div>
+      {!cargado ? <div style={{ fontSize: 13, color: C.muted }}>Cargando…</div>
+        : estudios.length === 0 ? <div style={{ fontSize: 13, color: C.muted }}>Sin estudios registrados todavía.</div>
+          : estudios.map((es, i) => (
+            <div key={i} style={{ background: C.surface, border: "1px solid " + C.border, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{lTipo(es.tipo)}</span>
+                <span style={{ fontSize: 11, color: C.muted }}>{es.fecha}</span>
+              </div>
+              {es.centro && <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>{es.centro}</div>}
+              {es.hallazgos && <div style={{ fontSize: 13, color: C.text, whiteSpace: "pre-wrap", marginBottom: 6 }}>{es.hallazgos}</div>}
+              {es.enlace && <a href={es.enlace} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 700, color: C.primary, textDecoration: "none" }}>📎 Ver archivo</a>}
+              <div style={{ marginTop: 8 }}><button onClick={() => borrar(i)} style={{ background: "transparent", border: "1px solid " + C.border, color: C.muted, borderRadius: 8, padding: "4px 10px", fontSize: 11, cursor: "pointer" }}>🗑️ Quitar</button></div>
+            </div>
+          ))}
+    </div>
+  );
+}
+
 function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugins }) {
   const { C } = useApp();
   const [tab, setTab] = useState("sesiones");
@@ -1474,9 +1563,9 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
       </Card>
 
       <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.border}` }}>
-        {["sesiones", "historia", "valoracion"].map(t => (
+        {["sesiones", "historia", "motor", "estudios", "valoracion"].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: "9px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, textTransform: "capitalize", color: tab === t ? C.primary : C.muted, borderBottom: tab === t ? `2px solid ${C.primary}` : "2px solid transparent" }}>
-            {t === "sesiones" ? "📅 Sesiones" : t === "historia" ? "📋 Historia" : "💪 Valoración"}
+            {t === "sesiones" ? "📅 Sesiones" : t === "historia" ? "📋 Historia" : t === "motor" ? "🧠 Motor Central" : t === "estudios" ? "🩻 Estudios" : "💪 Valoración"}
           </button>
         ))}
       </div>
@@ -1542,6 +1631,14 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
 
       {tab === "historia" && (
         <HistoriaClinicaV3 patient={patient} C={C} />
+      )}
+
+      {tab === "motor" && (
+        <MotorCentralPlugin patient={patient} />
+      )}
+
+      {tab === "estudios" && (
+        <EstudiosClinicos patient={patient} C={C} />
       )}
 
       {tab === "valoracion" && (
@@ -2651,6 +2748,20 @@ function runMotorDx(data) {
 
 function MotorCentralPlugin({patient}) {
   const {C} = useApp();
+  const { update: _updHc } = useClinicalRecord(patient);
+  const [guardado,setGuardado]=useState(false);
+  async function guardarEnHistoria(res){
+    if(!patient||!patient.id){alert("Abre Motor Central desde un paciente para poder guardar.");return;}
+    const datosMotor={ eva, termografia:{...termo}, psqi:sueno.psqi, isi:sueno.isi, epworth:sueno.epworth, dhi:vertigo.dhi, dix_hallpike:vertigo.dix_hallpike, cadenas, endocrino, nutricion_def:nutricion.deficiencias, neuro, motor_central:{ capturado:{eva,lesiones,termo,sueno,vertigo,cadenas,endocrino,nutricion,neuro}, resultado:res, fecha:new Date().toISOString() } };
+    try{ _updHc(datosMotor); }catch(e){}
+    try{
+      const prev=await CoreServices.query("clinical_records",{paciente_id:patient.id});
+      const base=(prev.data&&prev.data[0]&&prev.data[0].datos)?prev.data[0].datos:{};
+      const merged={...base,...datosMotor};
+      await fetch(SUPABASE_URL+"/rest/v1/clinical_records?on_conflict=paciente_id",{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY,"Authorization":"Bearer "+(CoreServices.getToken()||SUPABASE_KEY),"Prefer":"resolution=merge-duplicates"},body:JSON.stringify([{paciente_id:patient.id,datos:merged,updated_at:new Date().toISOString()}])});
+      setGuardado(true);setTimeout(()=>setGuardado(false),2500);
+    }catch(e){alert("No se pudo guardar en la historia: "+(e.message||e));}
+  }
   const MODS = [
     {id:"dolor",label:"1️⃣ Dolor",color:C.danger},
     {id:"lesiones",label:"2️⃣ Killer Practical",color:C.warning},
@@ -4173,7 +4284,7 @@ function ReportePlugin({ patient }) { const { C } = useApp(); const [pdfUrl, set
   { id: "vald", name: "VALD", icon: "💪", color: DS.colors.warning, group: "devices", description: "Fuerza y rendimiento", component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración de fuerza y rendimiento vía REST API (OAuth2)." coming />, patientAction: true, patientActionLabel: "VALD", onPatientAction: (p, nav) => nav("vald", p) },
   { id: "bodygee", name: "Bodygee", icon: "🔵", color: DS.colors.purple, group: "devices", description: "Escaneo 3D corporal", component: () => <PlaceholderPlugin name="Bodygee" icon="🔵" description="Escaneo 3D corporal vía REST API + Webhooks." coming /> },
   { id: "garmin", name: "Wearables", icon: "⌚", color: DS.colors.success, group: "devices", description: "Garmin / Polar / Fitbit", component: WearablesPlugin },
-  { id: "motor", name: "Motor Central", icon: "🧠", color: DS.colors.purple, group: "clinical", badge: "Core", description: "Diagnóstico 9→4 capas", component: MotorCentralPlugin, patientAction: true, patientActionLabel: "Motor Dx", onPatientAction: (p, nav) => nav("motor", p) },
+  
   { id: "analytics", name: "Analytics", icon: "📈", color: DS.colors.purple, group: "business", description: "Métricas y reportes", component: AnalyticsPlugin },
   { id: "telemedicine", name: "Telemedicina", icon: "📱", color: DS.colors.teal, group: "clinical", description: "Video, chat y archivos", component: TelemedicinePlugin, patientAction: true, patientActionLabel: "Telemedicina", onPatientAction: (p, nav) => nav("telemedicine", p) },
   { id: "payments", name: "Planes y Pagos", icon: "💳", color: DS.colors.success, group: "business", description: "Membresías y facturación", component: PaymentsPlugin },
