@@ -490,7 +490,7 @@ function PatientsPlugin({ patients, sessions, onAddPatient, navigate }) {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const FORM_INIT = { nombre: "", apellido: "", fecha_nacimiento: "", edad: "", sexo: "", telefono: "", email: "", condicion_principal: "", deporte: "", nivel_actividad: "Moderado" };
+  const FORM_INIT = { nombre: "", apellido: "", fecha_nacimiento: "", edad: "", sexo: "", telefono: "", email: "", condicion_principal: "", deporte: "", nivel_actividad: "Moderado", pais: "" };
   const [form, setForm] = useState(FORM_INIT);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const [alexText, setAlexText] = useState("");
