@@ -4663,16 +4663,16 @@ export default function App() {
     ActiveComp = activePlugin.component;
   }
 
-  const groups = Object.keys(PLUGIN_GROUPS);
+  const compacto = active.id === "patient-detail", groups = Object.keys(PLUGIN_GROUPS);
 
   return (
     <AppCtx.Provider value={{ C, user }}>
       <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>
         {/* Sidebar */}
-        <div style={{ width: 240, borderRight: `1px solid ${C.border}`, padding: "18px 14px", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", boxSizing: "border-box", overflowY: "auto" }}>
+        <div style={{ width: compacto ? 72 : 240, borderRight: `1px solid ${C.border}`, padding: "18px 14px", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", boxSizing: "border-box", overflowY: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "0 6px" }}>
             <div style={{ width: 32, height: 32, borderRadius: 10, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>🌿</div>
-            <div><div style={{ fontSize: 14, fontWeight: 800 }}>Awake4Wellness</div><div style={{ fontSize: 9, color: C.muted }}>v4.0 · {DEMO_CREDENTIALS[rol]?.label || "Médico"}</div></div>
+            {!compacto && <div><div style={{ fontSize: 14, fontWeight: 700 }}>Awake4Wellness</div><div style={{ fontSize: 9, color: C.muted }}>v4.0 · {DEMO_CREDENTIALS[rol]?.label || "Médico"}</div></div>}
           </div>
 
           {groups.map(g => {
