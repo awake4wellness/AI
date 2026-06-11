@@ -23,7 +23,7 @@ const _hcSubs = new Set();    // avisa a los componentes cuando algo cambia
 function _hcEmit() { _hcSubs.forEach((fn) => fn()); }
 
 // Estado inicial vacío de una HC. Ajusta/añade campos según tu HistoriaClinicaV3.
-function createEmptyHc(patient = {}) {
+function createEmptyHc(p) { const patient = p || {};
   return {
     // Datos
     nombre: [patient.nombre, patient.apellido].filter(Boolean).join(" "),
