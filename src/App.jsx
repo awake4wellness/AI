@@ -20,7 +20,6 @@ import { useState, useEffect, useRef, createContext, useContext, Component } fro
 // --- Una sola "pizarra" en memoria para toda la app ---
 const _hcStore = {};          // { [patientId]: hc }
 const _hcSubs = new Set();    // avisa a los componentes cuando algo cambia
-const _hcLoaded = new Set();  // pacientes ya hidratados desde la base (evita recargas)
 function _hcEmit() { _hcSubs.forEach((fn) => fn()); }
 
 // Estado inicial vacío de una HC. Ajusta/añade campos según tu HistoriaClinicaV3.
@@ -42,16 +41,6 @@ function createEmptyHc(p) { const patient = p || {};
     medicamentos: "", ant_deportivos: "", lesiones_sospecha: {},
     // Tecnología (termografía / eco)
     termografia: {},
-    // Módulos compartidos del Motor Central (fuente única para RESUMEN LIVE, Copiloto e IA)
-    sueno: { psqi: 0, isi: 0, epworth: 0 },
-    vertigo: { dhi: 0, dix_hallpike: "negativo", red_flags: false },
-    nutricion: { deficiencias: [] },
-    neuro: { dolor_persistente: false, trigger_points: false, fiebre: false, esfinteres: false },
-    cadenas: {}, endocrino: {},
-    bioresonancia: {},   // Adri
-    wearable: {},        // Anillo
-    fuerza: {},          // VALD / Fuerza
-    inbody: {},          // composición corporal
     // Diagnóstico 4 capas
     dx_estructural: "", grado_estructural: "",
     dx_funcional: "",  grado_funcional: "",
@@ -89,13 +78,6 @@ function buildContext(hc = {}, patient = {}) {
   // Motivo y dolor
   add("Motivo de consulta", hc.motivo);
   add("Dolor (EVA 0-10)", hc.eva);
-  add("Sueño (PSQI)", hc.sueno?.psqi);
-  add("Vértigo (DHI)", hc.vertigo?.dhi);
-  add("Termografía TSI", hc.termografia?.tsi);
-  add("Termografía ΔT (°C)", hc.termografia?.asimetria);
-  if (hc.nutricion?.deficiencias?.length) add("Déficits nutricionales", hc.nutricion.deficiencias.join(", "));
-  if (hc.bioresonancia && Object.keys(hc.bioresonancia).length) add("Bioresonancia (Adri)", JSON.stringify(hc.bioresonancia));
-  if (hc.fuerza && Object.keys(hc.fuerza).length) add("Fuerza/VALD", JSON.stringify(hc.fuerza));
   add("Tipo de dolor", hc.tipo_dolor);
   add("Localización", hc.localizacion);
   add("Patrón", hc.patron);
@@ -140,25 +122,6 @@ function useClinicalRecord(patient) {
     _hcSubs.add(fn);
     return () => _hcSubs.delete(fn);
   }, []);
-  // Hidratación: al abrir un paciente, carga su historia guardada (clinical_records)
-  // al store compartido para que el RESUMEN LIVE / Copiloto la muestren. La base guarda
-  // PLANO (eva, psqi, dhi); aquí se mapea a la forma anidada que usa el Motor Central.
-  useEffect(() => {
-    if (!patient || !patient.id || _hcLoaded.has(patientId)) return;
-    _hcLoaded.add(patientId);
-    CoreServices.query("clinical_records", { paciente_id: patient.id }).then(({ data }) => {
-      const d = data && data[0] && data[0].datos;
-      if (!d) return;
-      const mapped = {
-        ...d,
-        sueno: d.sueno || { psqi: Number(d.psqi) || 0, isi: Number(d.isi) || 0, epworth: Number(d.epworth) || 0 },
-        vertigo: d.vertigo || { dhi: Number(d.dhi) || 0, dix_hallpike: d.dix_hallpike || "negativo", red_flags: !!d.red_flags },
-        nutricion: d.nutricion || { deficiencias: d.nutricion_def || [] },
-      };
-      _hcStore[patientId] = { ...createEmptyHc(patient), ...mapped, ...(_hcStore[patientId] || {}) };
-      _hcEmit();
-    }).catch(() => {});
-  }, [patientId]);
   const hc = _hcStore[patientId] || createEmptyHc(patient);
   return {
     hc,
@@ -1132,21 +1095,6 @@ function HistoriaClinicaV3({ patient, C }) {
       </div>
 
       <div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8, marginBottom: 16 }}>
-          {[
-            { l: "EVA", v: `${hc.eva || 0}/10`, c: (hc.eva || 0) >= 8 ? C.danger : (hc.eva || 0) >= 5 ? C.warning : C.success },
-            { l: "Lesiones", v: Object.values(hc.lesiones_sospecha || {}).filter(Boolean).length, c: C.warning },
-            { l: "PSQI", v: hc.psqi || 0, c: (hc.psqi || 0) >= 5 ? C.danger : C.success },
-            { l: "TSI", v: hc.termografia?.tsi || "neutro", c: String(hc.termografia?.tsi || "").toLowerCase().startsWith("hiperter") ? C.danger : C.success },
-            { l: "ΔT", v: `${hc.termografia?.asimetria || 0}°C`, c: (hc.termografia?.asimetria || 0) >= 1.5 ? C.danger : C.success },
-            { l: "DHI", v: hc.dhi || 0, c: (hc.dhi || 0) >= 60 ? C.danger : C.success },
-          ].map(m => (
-            <div key={m.l} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", textAlign: "center" }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>{m.l}</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: m.c }}>{m.v}</div>
-            </div>
-          ))}
-        </div>
         <ConsultaPorVoz patient={patient} onAutoFill={autoFillFromVoice} C={C} />
 <DictadoClinico patient={patient} onAutoFill={autoFillFromVoice} C={C} />
         {seccion === "s1" && <div>
@@ -1722,7 +1670,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
       </Card>
 
       <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.border}` }}>
-        {["sesiones", "historia", "estudios", "valoracion"].map(t => (
+        {["sesiones", "historia", "motor", "estudios", "valoracion"].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: "9px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, textTransform: "capitalize", color: tab === t ? C.primary : C.muted, borderBottom: tab === t ? `2px solid ${C.primary}` : "2px solid transparent" }}>
             {t === "sesiones" ? "📅 Sesiones" : t === "historia" ? "📋 Historia" : t === "motor" ? "🧠 Motor Central" : t === "estudios" ? "🩻 Estudios" : "💪 Valoración"}
           </button>
@@ -1850,7 +1798,6 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
 // ── PLUGIN: FLIR Camera + Galería Termográfica ─────────────
 function FLIRPlugin({ patient }) {
   const { C } = useApp();
-  const { update: _updHc } = useClinicalRecord(patient);
   const [tab, setTab] = useState("camara"); // camara | galeria | comparar
   const [status, setStatus] = useState("disconnected");
   const [captured, setCaptured] = useState(false);
@@ -1864,13 +1811,6 @@ function FLIRPlugin({ patient }) {
       setImagenes(termos.map((s, i) => ({ id: s.id || i, fecha: s.fecha ? new Date(s.fecha).toLocaleDateString("es-ES") : "", sesion: s.numero_sesion || (i + 1), zona: "Termografía", tsi: "Neutro", asimetria: 0, url: s.foto, notas: s.notas || "", protocolo: "Termografía" })));
     });
   }, [patient]);
-  // Unificación: la imagen de mayor asimetría alimenta hc.termografia → RESUMEN LIVE / Copiloto / IA
-  useEffect(() => {
-    if (!imagenes.length) return;
-    const peor = imagenes.reduce((a, b) => ((b.asimetria || 0) > (a.asimetria || 0) ? b : a));
-    const tsi = String(peor.tsi || "neutro").toLowerCase().replace(/[áàä]/g,"a").replace(/[éèë]/g,"e").replace(/[íìï]/g,"i").replace(/[óòö]/g,"o").replace(/[úùü]/g,"u");
-    _updHc({ termografia: { tsi, asimetria: Number(peor.asimetria) || 0, zona: peor.zona, fecha: peor.fecha } });
-  }, [imagenes]);
   const [selectedImg, setSelectedImg] = useState(null);
   const [compareA, setCompareA] = useState(null);
   const [compareB, setCompareB] = useState(null);
@@ -2915,7 +2855,7 @@ function runMotorDx(data) {
 
 function MotorCentralPlugin({patient}) {
   const {C} = useApp();
-  const { hc, update: _updHc } = useClinicalRecord(patient);
+  const { update: _updHc } = useClinicalRecord(patient);
   const [guardado,setGuardado]=useState(false);
   const { transcript: mcVoz, listening: mcListen, supported: mcVozOk, start: mcStart, resume: mcResume, stop: mcStop, setTranscript: mcSet } = useSpeechRecognition();
   const [mcAbierto,setMcAbierto]=useState(false);
@@ -2964,26 +2904,15 @@ function MotorCentralPlugin({patient}) {
   const [step,setStep]=useState(0);
   const [running,setRunning]=useState(false);
   const [resultado,setResultado]=useState(null);
-  // hc = ÚNICA FUENTE DE LA VERDAD. Cada módulo lee de hc y escribe en hc;
-  // el pub/sub re-renderiza RESUMEN LIVE, Copiloto e IA al instante, y persiste al reabrir.
-  const eva = hc.eva || 0;
-  const setEva = (v) => _updHc({ eva: Number(typeof v === "function" ? v(eva) : v) || 0 });
-  const lesiones = hc.lesiones_sospecha || {};
-  const setLesiones = (v) => _updHc({ lesiones_sospecha: typeof v === "function" ? v(lesiones) : v });
-  const termo = (hc.termografia && Object.keys(hc.termografia).length) ? hc.termografia : {tsi:"neutro",asimetria:0};
-  const setTermo = (v) => _updHc({ termografia: typeof v === "function" ? v(termo) : v });
-  const sueno = hc.sueno || {psqi:0,isi:0,epworth:0};
-  const setSueno = (v) => _updHc({ sueno: typeof v === "function" ? v(sueno) : v });
-  const vertigo = hc.vertigo || {dix_hallpike:"negativo",dhi:0,red_flags:false};
-  const setVertigo = (v) => _updHc({ vertigo: typeof v === "function" ? v(vertigo) : v });
-  const cadenas = hc.cadenas || {};
-  const setCadenas = (v) => _updHc({ cadenas: typeof v === "function" ? v(cadenas) : v });
-  const endocrino = hc.endocrino || {};
-  const setEndocrino = (v) => _updHc({ endocrino: typeof v === "function" ? v(endocrino) : v });
-  const nutricion = hc.nutricion || {deficiencias:[]};
-  const setNutricion = (v) => _updHc({ nutricion: typeof v === "function" ? v(nutricion) : v });
-  const neuro = hc.neuro || {dolor_persistente:false,trigger_points:false,fiebre:false,esfinteres:false};
-  const setNeuro = (v) => _updHc({ neuro: typeof v === "function" ? v(neuro) : v });
+  const [eva,setEva]=useState(0);
+  const [lesiones,setLesiones]=useState({});
+  const [termo,setTermo]=useState({tsi:"neutro",asimetria:0});
+  const [sueno,setSueno]=useState({psqi:0,isi:0,epworth:0});
+  const [vertigo,setVertigo]=useState({dix_hallpike:"negativo",dhi:0,red_flags:false});
+  const [cadenas,setCadenas]=useState({});
+  const [endocrino,setEndocrino]=useState({});
+  const [nutricion,setNutricion]=useState({deficiencias:[]});
+  const [neuro,setNeuro]=useState({dolor_persistente:false,trigger_points:false,fiebre:false,esfinteres:false});
 
   function ejecutar(){
     setRunning(true);
