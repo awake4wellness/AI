@@ -1132,6 +1132,21 @@ function HistoriaClinicaV3({ patient, C }) {
       </div>
 
       <div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8, marginBottom: 16 }}>
+          {[
+            { l: "EVA", v: `${hc.eva || 0}/10`, c: (hc.eva || 0) >= 8 ? C.danger : (hc.eva || 0) >= 5 ? C.warning : C.success },
+            { l: "Lesiones", v: Object.values(hc.lesiones_sospecha || {}).filter(Boolean).length, c: C.warning },
+            { l: "PSQI", v: hc.psqi || 0, c: (hc.psqi || 0) >= 5 ? C.danger : C.success },
+            { l: "TSI", v: hc.termografia?.tsi || "neutro", c: String(hc.termografia?.tsi || "").toLowerCase().startsWith("hiperter") ? C.danger : C.success },
+            { l: "ΔT", v: `${hc.termografia?.asimetria || 0}°C`, c: (hc.termografia?.asimetria || 0) >= 1.5 ? C.danger : C.success },
+            { l: "DHI", v: hc.dhi || 0, c: (hc.dhi || 0) >= 60 ? C.danger : C.success },
+          ].map(m => (
+            <div key={m.l} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 10px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>{m.l}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: m.c }}>{m.v}</div>
+            </div>
+          ))}
+        </div>
         <ConsultaPorVoz patient={patient} onAutoFill={autoFillFromVoice} C={C} />
 <DictadoClinico patient={patient} onAutoFill={autoFillFromVoice} C={C} />
         {seccion === "s1" && <div>
@@ -1707,7 +1722,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
       </Card>
 
       <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.border}` }}>
-        {["sesiones", "historia", "motor", "estudios", "valoracion"].map(t => (
+        {["sesiones", "historia", "estudios", "valoracion"].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: "9px 16px", border: "none", cursor: "pointer", background: "transparent", fontSize: 13, fontWeight: 700, textTransform: "capitalize", color: tab === t ? C.primary : C.muted, borderBottom: tab === t ? `2px solid ${C.primary}` : "2px solid transparent" }}>
             {t === "sesiones" ? "📅 Sesiones" : t === "historia" ? "📋 Historia" : t === "motor" ? "🧠 Motor Central" : t === "estudios" ? "🩻 Estudios" : "💪 Valoración"}
           </button>
