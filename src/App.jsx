@@ -11,6 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, createContext, useContext, Component } from "react";
+import { QRCodeSVG } from "qrcode.react";
 // ═══════════════════════════════════════════════════════════════
 // BLOQUE 1/5 · Store compartido de Historia Clínica (Awake4Wellness)
 // Versión "se cuelga sola": NO hay que envolver nada en la app.
@@ -1655,12 +1656,26 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
   const { C } = useApp();
   const [tab, setTab] = useState("sesiones"); const [verBienvenida, setVerBienvenida] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showAcceso, setShowAcceso] = useState(false); const [accesoUrl, setAccesoUrl] = useState(""); const [generando, setGenerando] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ protocolo: "HILT", eva_pre: 5, eva_post: 3, notas: "", duracion_minutos: 30, subjetivo: "", objetivo: "", analisis: "", plan: "" }); const [showEdit, setShowEdit] = useState(false); const [savingEdit, setSavingEdit] = useState(false); const [showCaso, setShowCaso] = useState(false); const [savingCaso, setSavingCaso] = useState(false); const [casoForm, setCasoForm] = useState(patient.caso || {}); const [editForm, setEditForm] = useState({ nombre: patient.nombre || "", apellido: patient.apellido || "", edad: patient.edad || "", sexo: patient.sexo || "", telefono: patient.telefono || "", email: patient.email || "", condicion_principal: patient.condicion_principal || "", deporte: patient.deporte || "", nivel_actividad: patient.nivel_actividad || "Moderado", pais: patient.pais || "" });
   const patSess = sessions.filter(s => s.paciente_id === patient.id).sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
   const mej = patSess.filter(s => s.eva_pre && s.eva_post).length ? Math.round(patSess.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / patSess.filter(s => s.eva_pre && s.eva_post).length) : 0;
 
   async function save() { setSaving(true); await onAddSession({ protocolo: form.protocolo, eva_pre: form.eva_pre, eva_post: form.eva_post, duracion_minutos: form.duracion_minutos, notas: "S: " + (form.subjetivo || "") + "\nO: " + (form.objetivo || "") + "\nA: " + (form.analisis || "") + "\nP: " + (form.plan || ""), paciente_id: patient.id, numero_sesion: patSess.length + 1 }); setShowModal(false); setSaving(false); } function abrirEdicion() { setEditForm({ nombre: patient.nombre || "", apellido: patient.apellido || "", edad: patient.edad || "", sexo: patient.sexo || "", telefono: patient.telefono || "", email: patient.email || "", condicion_principal: patient.condicion_principal || "", deporte: patient.deporte || "", nivel_actividad: patient.nivel_actividad || "Moderado", pais: patient.pais || "" }); setShowEdit(true); } async function guardarEdit() { setSavingEdit(true); const { error } = await CoreServices.update("patients", patient.id, editForm); setSavingEdit(false); if (error) { alert("No se pudo guardar: " + (error.message || "error")); return; } Object.assign(patient, editForm); setShowEdit(false); } function abrirCaso() { setCasoForm(patient.caso || {}); setShowCaso(true); } async function guardarCaso() { setSavingCaso(true); const { error } = await CoreServices.update("patients", patient.id, { caso: casoForm }); setSavingCaso(false); if (error) { alert("No se pudo guardar: " + (error.message || "error")); return; } patient.caso = casoForm; setShowCaso(false); }
+  async function abrirAcceso() {
+    let token = patient.portal_token;
+    if (!token) {
+      setGenerando(true);
+      token = (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
+      const { error } = await CoreServices.update("patients", patient.id, { portal_token: token });
+      setGenerando(false);
+      if (error) { alert("No se pudo generar el acceso: " + (error.message || "error")); return; }
+      patient.portal_token = token;
+    }
+    setAccesoUrl(`${window.location.origin}/?p=${token}`);
+    setShowAcceso(true);
+  }
 
   const patientPlugins = plugins.filter(p => p.patientAction);
 
@@ -1684,9 +1699,26 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
               {plugin.icon} {plugin.patientActionLabel || plugin.name}
             </button>
           ))}
-          <button onClick={async () => { const datos = { paciente: { nombre: patient.nombre, apellido: patient.apellido, edad: patient.edad, sexo: patient.sexo, condicion: patient.condicion_principal, deporte: patient.deporte, email: patient.email }, exportado: new Date().toISOString(), sesiones: patSess.map(s => ({ protocolo: s.protocolo, fecha: s.fecha, numero_sesion: s.numero_sesion, eva_pre: s.eva_pre, eva_post: s.eva_post, notas: s.notas, foto: s.foto || "" })) }; const texto = JSON.stringify(datos, null, 2); const nombreArchivo = "paciente_" + (patient.apellido || "") + "_" + (patient.nombre || "paciente") + ".json"; try { if (window.showSaveFilePicker) { const h = await window.showSaveFilePicker({ suggestedName: nombreArchivo }); const w = await h.createWritable(); await w.write(texto); await w.close(); alert("Listo: guardado en la carpeta que elegiste"); } else { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" })); a.download = nombreArchivo; a.click(); } } catch (e) { if (e.name !== "AbortError") alert("No se guardo: " + (e.message || e)); } }} style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.4)", color: "#38BDF8", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>📥 Descargar para Adri</button><Btn onClick={abrirEdicion} color={C.warning}>✏️ Editar ficha</Btn><Btn onClick={abrirCaso} color={C.danger}>🚗 Caso / Accidente</Btn><Btn onClick={() => setShowModal(true)} color={C.primary}>+ Sesión</Btn>
+          <button onClick={async () => { const datos = { paciente: { nombre: patient.nombre, apellido: patient.apellido, edad: patient.edad, sexo: patient.sexo, condicion: patient.condicion_principal, deporte: patient.deporte, email: patient.email }, exportado: new Date().toISOString(), sesiones: patSess.map(s => ({ protocolo: s.protocolo, fecha: s.fecha, numero_sesion: s.numero_sesion, eva_pre: s.eva_pre, eva_post: s.eva_post, notas: s.notas, foto: s.foto || "" })) }; const texto = JSON.stringify(datos, null, 2); const nombreArchivo = "paciente_" + (patient.apellido || "") + "_" + (patient.nombre || "paciente") + ".json"; try { if (window.showSaveFilePicker) { const h = await window.showSaveFilePicker({ suggestedName: nombreArchivo }); const w = await h.createWritable(); await w.write(texto); await w.close(); alert("Listo: guardado en la carpeta que elegiste"); } else { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" })); a.download = nombreArchivo; a.click(); } } catch (e) { if (e.name !== "AbortError") alert("No se guardo: " + (e.message || e)); } }} style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.4)", color: "#38BDF8", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>📥 Descargar para Adri</button><Btn onClick={abrirEdicion} color={C.warning}>✏️ Editar ficha</Btn><Btn onClick={abrirCaso} color={C.danger}>🚗 Caso / Accidente</Btn><Btn onClick={abrirAcceso} color={C.teal}>{generando ? "Generando..." : "🔗 Dar acceso al portal"}</Btn><Btn onClick={() => setShowModal(true)} color={C.primary}>+ Sesión</Btn>
         </div>
       </Card>
+
+      <Modal open={showAcceso} onClose={() => setShowAcceso(false)} title="Acceso al portal del paciente" width={460}>
+        <div style={{ textAlign: "center", padding: "4px 4px 8px" }}>
+          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 16 }}>
+            {patient.nombre} puede entrar a su portal escaneando este código con la cámara del celular, o abriendo el enlace. Solo verá su propia información.
+          </div>
+          <div style={{ background: "#fff", display: "inline-block", padding: 14, borderRadius: 14, marginBottom: 16 }}>
+            {accesoUrl ? <QRCodeSVG value={accesoUrl} size={184} /> : null}
+          </div>
+          <input readOnly value={accesoUrl} onFocus={e => e.target.select()} style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 11, marginBottom: 14 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn color={C.primary} style={{ flex: 1 }} onClick={() => { try { navigator.clipboard.writeText(accesoUrl); alert("Enlace copiado"); } catch { alert("Copia manual el enlace de arriba"); } }}>📋 Copiar</Btn>
+            <Btn color={C.success} style={{ flex: 1 }} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent("Hola " + (patient.nombre || "") + ", este es tu acceso a tu portal de Awake4Wellness: " + accesoUrl)}`, "_blank")}>📱 WhatsApp</Btn>
+            <Btn color={C.warning} style={{ flex: 1 }} onClick={() => window.open(`mailto:${patient.email || ""}?subject=${encodeURIComponent("Tu portal Awake4Wellness")}&body=${encodeURIComponent("Hola " + (patient.nombre || "") + ", este es tu acceso a tu portal del paciente: " + accesoUrl)}`)}>✉️ Correo</Btn>
+          </div>
+        </div>
+      </Modal>
 
       <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.border}` }}>
         {["sesiones", "historia", "motor", "estudios", "valoracion"].map(t => (
