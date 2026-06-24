@@ -4728,7 +4728,7 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
   const C = DS.colors;
   const misSesiones = sesiones || [];
   const [tele, setTele] = useState(false);
-  const [reagendar, setReagendar] = useState(false); const [nuevaFecha, setNuevaFecha] = useState(""); const [citaEstado, setCitaEstado] = useState(null); const [accionMsg, setAccionMsg] = useState("");
+  const [reagendar, setReagendar] = useState(false); const [nuevoDia, setNuevoDia] = useState(""); const [nuevaHora, setNuevaHora] = useState(""); const [citaEstado, setCitaEstado] = useState(null); const [accionMsg, setAccionMsg] = useState("");
   async function confirmarCita(citaId) {
     if (!token || !citaId) return;
     setAccionMsg("Confirmando…");
@@ -4737,11 +4737,11 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
     setAccionMsg(ok ? "✓ ¡Cita confirmada! Te esperamos." : "No se pudo confirmar, intentá de nuevo.");
   }
   async function pedirReagendar() {
-    if (!token || !nuevaFecha) { setAccionMsg("Elegí una fecha y hora."); return; }
+    if (!token || !nuevoDia || !nuevaHora) { setAccionMsg("Elegí el día y la hora."); return; }
     setAccionMsg("Enviando pedido…");
-    const ok = await CoreServices.rpc("portal_solicitar_cita", { p_token: token, p_fecha: new Date(nuevaFecha).toISOString(), p_nota: "El paciente pidió esta fecha desde el portal" });
-    setReagendar(false); setNuevaFecha("");
-    setAccionMsg(ok ? "✓ Pedido enviado. Tu médico te lo va a confirmar." : "No se pudo enviar, intentá de nuevo.");
+    const ok = await CoreServices.rpc("portal_solicitar_cita", { p_token: token, p_fecha: new Date(`${nuevoDia}T${nuevaHora}`).toISOString(), p_nota: "El paciente eligió este horario desde el portal" });
+    setReagendar(false); setNuevoDia(""); setNuevaHora("");
+    setAccionMsg(ok ? "✓ ¡Pedido enviado! Tu médico te lo va a confirmar." : "No se pudo enviar, intentá de nuevo.");
   }
 
   const num = v => (v == null || v === "" ? null : Number(v));
@@ -4807,9 +4807,16 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
               </>
             )}
             {reagendar && (
-              <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="datetime-local" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} style={{ flex: 1, boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13 }} />
-                <Btn color={C.primary} onClick={pedirReagendar} style={{ padding: "8px 14px" }}>Enviar</Btn>
+              <div style={{ marginTop: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>1. Elegí el día</div>
+                <input type="date" value={nuevoDia} onChange={e => setNuevoDia(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 13, marginBottom: 12 }} />
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>2. Elegí la hora</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {["08:00", "09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00", "18:00"].map(h => (
+                    <button key={h} onClick={() => setNuevaHora(h)} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${nuevaHora === h ? C.primary : C.border}`, background: nuevaHora === h ? dim(C.primary) : "transparent", color: nuevaHora === h ? C.primary : C.text, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{h}</button>
+                  ))}
+                </div>
+                <Btn color={C.primary} fullWidth onClick={pedirReagendar} style={{ padding: "9px" }}>Enviar pedido</Btn>
               </div>
             )}
             {accionMsg && <div style={{ marginTop: 10, fontSize: 12, color: C.success, fontWeight: 700 }}>{accionMsg}</div>}
@@ -5001,6 +5008,25 @@ export default function App() {
   const [active, setActive] = useState({ id: "dashboard", patient: null }); const [verBienvenida, setVerBienvenida] = useState(true);
   const [patients, setPatients] = useState(DEMO_PATIENTS);
   const [sessions, setSessions] = useState(DEMO_SESSIONS);
+  const [notis, setNotis] = useState([]); const [showNotis, setShowNotis] = useState(false);
+
+  useEffect(() => {
+    if (!user || (user.rol !== "medico" && user.rol !== "admin")) return;
+    let vivo = true;
+    const cargar = () => CoreServices.query("notificaciones").then(({ data }) => {
+      if (vivo && Array.isArray(data)) setNotis(data.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).slice(0, 30));
+    });
+    cargar();
+    const iv = setInterval(cargar, 45000);
+    return () => { vivo = false; clearInterval(iv); };
+  }, [user]);
+
+  async function marcarLeidos() {
+    const pendientes = notis.filter(n => !n.leido);
+    if (!pendientes.length) return;
+    setNotis(prev => prev.map(n => ({ ...n, leido: true })));
+    for (const n of pendientes) await CoreServices.update("notificaciones", n.id, { leido: true });
+  }
 
   useEffect(() => {
     CoreServices.query("patients").then(({ data }) => {
@@ -5057,6 +5083,7 @@ export default function App() {
   }
 
   const compacto = active.id === "patient-detail", groups = Object.keys(PLUGIN_GROUPS);
+  const noLeidos = notis.filter(n => !n.leido).length;
 
   return (
     <AppCtx.Provider value={{ C, user }}>
@@ -5105,6 +5132,23 @@ export default function App() {
               {active.id === "patient-detail" && active.patient ? `Pacientes / ${active.patient.nombre} ${active.patient.apellido}` : (activePlugin?.name || "")}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ position: "relative" }}>
+                <button onClick={() => { const abrir = !showNotis; setShowNotis(abrir); if (abrir) marcarLeidos(); }} title="Avisos" style={{ position: "relative", background: "none", border: `1px solid ${noLeidos ? C.danger : C.border}`, color: noLeidos ? C.danger : C.muted, borderRadius: 9, padding: "6px 10px", fontSize: 15, cursor: "pointer" }}>
+                  🔔
+                  {noLeidos > 0 && <span style={{ position: "absolute", top: -7, right: -7, background: C.danger, color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: 99, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{noLeidos}</span>}
+                </button>
+                {showNotis && (
+                  <div style={{ position: "absolute", right: 0, top: 42, width: 330, maxHeight: 400, overflowY: "auto", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 8, zIndex: 60, boxShadow: "0 10px 34px rgba(0,0,0,0.45)" }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, letterSpacing: 1, padding: "6px 8px 8px" }}>🔔 AVISOS DE PACIENTES</div>
+                    {notis.length === 0 ? <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>No hay avisos todavía. Cuando un paciente confirme o pida una cita, aparece acá.</div> : notis.map(n => (
+                      <div key={n.id} style={{ padding: "9px 8px", borderTop: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 12.5, color: C.text, lineHeight: 1.45 }}>{n.tipo === "cita_solicitada" ? "📅 " : "✓ "}{n.mensaje}</div>
+                        <div style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{n.created_at ? new Date(n.created_at).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span style={{ fontSize: 12, color: C.muted }}>{DEMO_CREDENTIALS[rol]?.icon} {user.email}</span>
               <Avatar name={user.email} size={30} color={DEMO_CREDENTIALS[rol]?.color || C.primary} />
               <button onClick={signOut} title="Salir y volver a la pantalla de inicio" style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>
