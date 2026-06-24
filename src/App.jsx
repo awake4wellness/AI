@@ -1091,6 +1091,21 @@ function HistoriaClinicaV3({ patient, C }) {
               💾 Guardar
             </button>
           </div>
+          <div style={{ marginTop: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${C.border}`, borderRadius: 12, padding: 12 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: C.dim, letterSpacing: 2, marginBottom: 10 }}>RESUMEN LIVE</div>
+            {[
+              { l: "EVA", v: `${hc.eva || 0}/10`, c: (hc.eva || 0) >= 8 ? C.danger : (hc.eva || 0) >= 5 ? C.warning : C.success },
+              { l: "Lesiones", v: Object.values(hc.lesiones_sospecha || {}).filter(Boolean).length, c: C.warning },
+              { l: "PSQI", v: hc.psqi || 0, c: (hc.psqi || 0) >= 5 ? C.danger : C.success },
+              { l: "TSI", v: hc.termografia?.tsi || "—", c: hc.termografia?.tsi === "hipertermico" ? C.danger : C.success },
+              { l: "ΔT", v: `${hc.termografia?.asimetria || 0}°C`, c: (hc.termografia?.asimetria || 0) >= 1.5 ? C.danger : C.success },
+              { l: "DHI", v: hc.dhi || 0, c: (hc.dhi || 0) >= 60 ? C.danger : C.success },
+            ].map(m => (
+              <div key={m.l} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                <span style={{ fontSize: 11, color: C.muted }}>{m.l}</span><span style={{ fontSize: 11, fontWeight: 700, color: m.c }}>{m.v}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
