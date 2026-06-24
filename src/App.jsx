@@ -1680,6 +1680,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
   const [showModal, setShowModal] = useState(false);
   const [showAcceso, setShowAcceso] = useState(false); const [accesoUrl, setAccesoUrl] = useState(""); const [generando, setGenerando] = useState(false);
   const [showReportes, setShowReportes] = useState(false); const [reportesPac, setReportesPac] = useState([]); const [subiendoRep, setSubiendoRep] = useState(false);
+  const [showAgenda, setShowAgenda] = useState(false); const [citasPac, setCitasPac] = useState([]); const [citaForm, setCitaForm] = useState({ fecha: "", protocolo: "HILT" }); const [guardandoCita, setGuardandoCita] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ protocolo: "HILT", eva_pre: 5, eva_post: 3, notas: "", duracion_minutos: 30, subjetivo: "", objetivo: "", analisis: "", plan: "" }); const [showEdit, setShowEdit] = useState(false); const [savingEdit, setSavingEdit] = useState(false); const [showCaso, setShowCaso] = useState(false); const [savingCaso, setSavingCaso] = useState(false); const [casoForm, setCasoForm] = useState(patient.caso || {}); const [editForm, setEditForm] = useState({ nombre: patient.nombre || "", apellido: patient.apellido || "", edad: patient.edad || "", sexo: patient.sexo || "", telefono: patient.telefono || "", email: patient.email || "", condicion_principal: patient.condicion_principal || "", deporte: patient.deporte || "", nivel_actividad: patient.nivel_actividad || "Moderado", pais: patient.pais || "" });
   const patSess = sessions.filter(s => s.paciente_id === patient.id).sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
@@ -1727,6 +1728,27 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
     if (r.storage_path) await CoreServices.borrarArchivo("reportes", r.storage_path);
     if (r.id) await CoreServices.del("reportes", r.id);
   }
+  async function abrirAgenda() {
+    setShowAgenda(true);
+    const { data } = await CoreServices.query("citas", { paciente_id: patient.id });
+    setCitasPac((data || []).sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)));
+  }
+  async function crearCita() {
+    if (!citaForm.fecha) { alert("Elegí la fecha y la hora de la cita."); return; }
+    setGuardandoCita(true);
+    const { data, error } = await CoreServices.insert("citas", { paciente_id: patient.id, fecha: new Date(citaForm.fecha).toISOString(), tipo: "sesion", protocolo: citaForm.protocolo || null, estado: "confirmada", origen: "interno" });
+    setGuardandoCita(false);
+    if (error) { alert("No se pudo agendar: " + (error.message || "error")); return; }
+    const nueva = (data && data[0]) || { id: Date.now().toString(), fecha: new Date(citaForm.fecha).toISOString(), protocolo: citaForm.protocolo, estado: "confirmada", origen: "interno" };
+    setCitasPac(prev => [nueva, ...prev].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)));
+    setCitaForm({ fecha: "", protocolo: "HILT" });
+  }
+  async function cambiarEstadoCita(c, estado) {
+    if (estado === "cancelada" && !window.confirm("¿Cancelar esta cita?")) return;
+    const { error } = await CoreServices.update("citas", c.id, { estado });
+    if (error) { alert("No se pudo actualizar la cita"); return; }
+    setCitasPac(prev => prev.map(x => x.id === c.id ? { ...x, estado } : x));
+  }
 
   const patientPlugins = plugins.filter(p => p.patientAction);
 
@@ -1750,7 +1772,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
               {plugin.icon} {plugin.patientActionLabel || plugin.name}
             </button>
           ))}
-          <button onClick={async () => { const datos = { paciente: { nombre: patient.nombre, apellido: patient.apellido, edad: patient.edad, sexo: patient.sexo, condicion: patient.condicion_principal, deporte: patient.deporte, email: patient.email }, exportado: new Date().toISOString(), sesiones: patSess.map(s => ({ protocolo: s.protocolo, fecha: s.fecha, numero_sesion: s.numero_sesion, eva_pre: s.eva_pre, eva_post: s.eva_post, notas: s.notas, foto: s.foto || "" })) }; const texto = JSON.stringify(datos, null, 2); const nombreArchivo = "paciente_" + (patient.apellido || "") + "_" + (patient.nombre || "paciente") + ".json"; try { if (window.showSaveFilePicker) { const h = await window.showSaveFilePicker({ suggestedName: nombreArchivo }); const w = await h.createWritable(); await w.write(texto); await w.close(); alert("Listo: guardado en la carpeta que elegiste"); } else { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" })); a.download = nombreArchivo; a.click(); } } catch (e) { if (e.name !== "AbortError") alert("No se guardo: " + (e.message || e)); } }} style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.4)", color: "#38BDF8", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>📥 Descargar para Adri</button><Btn onClick={abrirEdicion} color={C.warning}>✏️ Editar ficha</Btn><Btn onClick={abrirCaso} color={C.danger}>🚗 Caso / Accidente</Btn><Btn onClick={abrirAcceso} color={C.teal}>{generando ? "Generando..." : "🔗 Dar acceso al portal"}</Btn><Btn onClick={abrirReportes} color={C.purple}>📄 Reportes</Btn><Btn onClick={() => setShowModal(true)} color={C.primary}>+ Sesión</Btn>
+          <button onClick={async () => { const datos = { paciente: { nombre: patient.nombre, apellido: patient.apellido, edad: patient.edad, sexo: patient.sexo, condicion: patient.condicion_principal, deporte: patient.deporte, email: patient.email }, exportado: new Date().toISOString(), sesiones: patSess.map(s => ({ protocolo: s.protocolo, fecha: s.fecha, numero_sesion: s.numero_sesion, eva_pre: s.eva_pre, eva_post: s.eva_post, notas: s.notas, foto: s.foto || "" })) }; const texto = JSON.stringify(datos, null, 2); const nombreArchivo = "paciente_" + (patient.apellido || "") + "_" + (patient.nombre || "paciente") + ".json"; try { if (window.showSaveFilePicker) { const h = await window.showSaveFilePicker({ suggestedName: nombreArchivo }); const w = await h.createWritable(); await w.write(texto); await w.close(); alert("Listo: guardado en la carpeta que elegiste"); } else { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" })); a.download = nombreArchivo; a.click(); } } catch (e) { if (e.name !== "AbortError") alert("No se guardo: " + (e.message || e)); } }} style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.4)", color: "#38BDF8", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>📥 Descargar para Adri</button><Btn onClick={abrirEdicion} color={C.warning}>✏️ Editar ficha</Btn><Btn onClick={abrirCaso} color={C.danger}>🚗 Caso / Accidente</Btn><Btn onClick={abrirAcceso} color={C.teal}>{generando ? "Generando..." : "🔗 Dar acceso al portal"}</Btn><Btn onClick={abrirAgenda} color={C.warning}>📅 Agenda</Btn><Btn onClick={abrirReportes} color={C.purple}>📄 Reportes</Btn><Btn onClick={() => setShowModal(true)} color={C.primary}>+ Sesión</Btn>
         </div>
       </Card>
 
@@ -1799,6 +1821,43 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
               )}
             </div>
           ))}
+        </div>
+      </Modal>
+
+      <Modal open={showAgenda} onClose={() => setShowAgenda(false)} title={`Agenda de ${patient.nombre || "paciente"}`} width={540}>
+        <div style={{ padding: "2px 2px 6px" }}>
+          <div style={{ background: dim(C.warning), border: `1px solid ${C.warning}30`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: C.warning, marginBottom: 10 }}>📅 AGENDAR NUEVA CITA</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div style={{ flex: "1 1 200px" }}>
+                <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Fecha y hora</div>
+                <input type="datetime-local" value={citaForm.fecha} onChange={e => setCitaForm({ ...citaForm, fecha: e.target.value })} style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13 }} />
+              </div>
+              <div style={{ flex: "0 1 130px" }}>
+                <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Tipo</div>
+                <input value={citaForm.protocolo} onChange={e => setCitaForm({ ...citaForm, protocolo: e.target.value })} placeholder="HILT" style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13 }} />
+              </div>
+              <Btn color={C.warning} onClick={crearCita} disabled={guardandoCita} style={{ padding: "9px 16px" }}>{guardandoCita ? "..." : "Agendar"}</Btn>
+            </div>
+          </div>
+          {citasPac.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No hay citas. Agendá la primera con el formulario de arriba.</div>
+          ) : citasPac.map((c, i) => {
+            const est = { solicitada: C.warning, confirmada: C.success, reprogramada: C.primary, cumplida: C.muted, cancelada: C.danger }[c.estado] || C.muted;
+            return (
+              <div key={c.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: i < citasPac.length - 1 ? `1px solid ${C.border}` : "none", opacity: c.estado === "cancelada" ? 0.5 : 1 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{c.fecha ? new Date(c.fecha).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{c.protocolo || c.tipo || "Cita"} · {c.origen === "portal" ? "pedida por el paciente" : "agendada por ti"}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <Badge color={est}>{c.estado}</Badge>
+                  {c.estado === "solicitada" && <button onClick={() => cambiarEstadoCita(c, "confirmada")} style={{ background: "none", border: `1px solid ${C.success}40`, color: C.success, borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓ Confirmar</button>}
+                  {c.estado !== "cancelada" && <button onClick={() => cambiarEstadoCita(c, "cancelada")} title="Cancelar cita" style={{ background: "none", border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✕</button>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Modal>
 
@@ -4651,7 +4710,7 @@ function PortalToken({ token, onSignOut }) {
     </div>
   );
   const dd = estado.datos;
-  return <PortalVista yo={dd.paciente} sesiones={dd.sesiones || []} citas={dd.citas || []} reportes={dd.reportes || []} recos={dd.recomendaciones || []} onSignOut={onSignOut} />;
+  return <PortalVista yo={dd.paciente} sesiones={dd.sesiones || []} citas={dd.citas || []} reportes={dd.reportes || []} recos={dd.recomendaciones || []} onSignOut={onSignOut} token={token} />;
 }
 
 function PortalCargando({ C, user }) {
@@ -4665,10 +4724,25 @@ function PortalCargando({ C, user }) {
 }
 
 // Presentación compartida del portal del paciente
-function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos }) {
+function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, token }) {
   const C = DS.colors;
   const misSesiones = sesiones || [];
   const [tele, setTele] = useState(false);
+  const [reagendar, setReagendar] = useState(false); const [nuevaFecha, setNuevaFecha] = useState(""); const [citaEstado, setCitaEstado] = useState(null); const [accionMsg, setAccionMsg] = useState("");
+  async function confirmarCita(citaId) {
+    if (!token || !citaId) return;
+    setAccionMsg("Confirmando…");
+    const ok = await CoreServices.rpc("portal_confirmar_cita", { p_token: token, p_cita_id: citaId });
+    setCitaEstado(ok ? "confirmada" : null);
+    setAccionMsg(ok ? "✓ ¡Cita confirmada! Te esperamos." : "No se pudo confirmar, intentá de nuevo.");
+  }
+  async function pedirReagendar() {
+    if (!token || !nuevaFecha) { setAccionMsg("Elegí una fecha y hora."); return; }
+    setAccionMsg("Enviando pedido…");
+    const ok = await CoreServices.rpc("portal_solicitar_cita", { p_token: token, p_fecha: new Date(nuevaFecha).toISOString(), p_nota: "El paciente pidió esta fecha desde el portal" });
+    setReagendar(false); setNuevaFecha("");
+    setAccionMsg(ok ? "✓ Pedido enviado. Tu médico te lo va a confirmar." : "No se pudo enviar, intentá de nuevo.");
+  }
 
   const num = v => (v == null || v === "" ? null : Number(v));
   const conEva = [...misSesiones]
@@ -4720,14 +4794,25 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos }) 
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, color: C.primary, letterSpacing: 1, marginBottom: 10 }}>📅 TU PRÓXIMA CITA</div>
             {proxima ? (<>
               <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>{fmtFechaHora(proxima.fecha)}</div>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>{proxima.protocolo ? `Sesión ${proxima.protocolo}` : (proxima.tipo || "Cita")} · Consultorio Awake4</div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{proxima.protocolo ? `Sesión ${proxima.protocolo}` : (proxima.tipo || "Cita")} · Consultorio Awake4</div>
+              <div style={{ marginBottom: 12 }}><Badge color={(citaEstado || proxima.estado) === "confirmada" ? C.success : C.warning}>{citaEstado || proxima.estado || "programada"}</Badge></div>
               <div style={{ display: "flex", gap: 10 }}>
-                <Btn color={C.success} onClick={() => alert("✓ Cita confirmada. ¡Te esperamos!")} style={{ flex: 1, padding: "9px" }}>✓ Confirmar</Btn>
-                <Btn color={C.muted} onClick={() => alert("Te contactaremos para reagendar tu cita.")} style={{ flex: 1, padding: "9px" }}>📅 Reagendar</Btn>
+                <Btn color={C.success} onClick={() => confirmarCita(proxima.id)} style={{ flex: 1, padding: "9px" }}>✓ Confirmar</Btn>
+                <Btn color={C.muted} onClick={() => setReagendar(v => !v)} style={{ flex: 1, padding: "9px" }}>📅 Reagendar</Btn>
               </div>
             </>) : (
-              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>No tienes citas programadas. Te avisaremos cuando agendemos la próxima.</div>
+              <>
+                <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>No tienes citas programadas todavía.</div>
+                <Btn color={C.primary} onClick={() => setReagendar(v => !v)} style={{ width: "100%", padding: "9px" }}>📅 Pedir una cita</Btn>
+              </>
             )}
+            {reagendar && (
+              <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="datetime-local" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} style={{ flex: 1, boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13 }} />
+                <Btn color={C.primary} onClick={pedirReagendar} style={{ padding: "8px 14px" }}>Enviar</Btn>
+              </div>
+            )}
+            {accionMsg && <div style={{ marginTop: 10, fontSize: 12, color: C.success, fontWeight: 700 }}>{accionMsg}</div>}
           </Card>
 
           {/* Mi progreso del dolor */}
