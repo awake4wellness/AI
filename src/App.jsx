@@ -41,6 +41,16 @@ function createEmptyHc(p) { const patient = p || {};
     medicamentos: "", ant_deportivos: "", lesiones_sospecha: {},
     // Tecnología (termografía / eco)
     termografia: {},
+    // Módulos compartidos del Motor Central (fuente única para RESUMEN LIVE, Copiloto e IA)
+    sueno: { psqi: 0, isi: 0, epworth: 0 },
+    vertigo: { dhi: 0, dix_hallpike: "negativo", red_flags: false },
+    nutricion: { deficiencias: [] },
+    neuro: { dolor_persistente: false, trigger_points: false, fiebre: false, esfinteres: false },
+    cadenas: {}, endocrino: {},
+    bioresonancia: {},   // Adri
+    wearable: {},        // Anillo
+    fuerza: {},          // VALD / Fuerza
+    inbody: {},          // composición corporal
     // Diagnóstico 4 capas
     dx_estructural: "", grado_estructural: "",
     dx_funcional: "",  grado_funcional: "",
@@ -78,6 +88,13 @@ function buildContext(hc = {}, patient = {}) {
   // Motivo y dolor
   add("Motivo de consulta", hc.motivo);
   add("Dolor (EVA 0-10)", hc.eva);
+  add("Sueño (PSQI)", hc.sueno?.psqi);
+  add("Vértigo (DHI)", hc.vertigo?.dhi);
+  add("Termografía TSI", hc.termografia?.tsi);
+  add("Termografía ΔT (°C)", hc.termografia?.asimetria);
+  if (hc.nutricion?.deficiencias?.length) add("Déficits nutricionales", hc.nutricion.deficiencias.join(", "));
+  if (hc.bioresonancia && Object.keys(hc.bioresonancia).length) add("Bioresonancia (Adri)", JSON.stringify(hc.bioresonancia));
+  if (hc.fuerza && Object.keys(hc.fuerza).length) add("Fuerza/VALD", JSON.stringify(hc.fuerza));
   add("Tipo de dolor", hc.tipo_dolor);
   add("Localización", hc.localizacion);
   add("Patrón", hc.patron);
@@ -1798,6 +1815,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
 // ── PLUGIN: FLIR Camera + Galería Termográfica ─────────────
 function FLIRPlugin({ patient }) {
   const { C } = useApp();
+  const { update: _updHc } = useClinicalRecord(patient);
   const [tab, setTab] = useState("camara"); // camara | galeria | comparar
   const [status, setStatus] = useState("disconnected");
   const [captured, setCaptured] = useState(false);
@@ -1811,6 +1829,13 @@ function FLIRPlugin({ patient }) {
       setImagenes(termos.map((s, i) => ({ id: s.id || i, fecha: s.fecha ? new Date(s.fecha).toLocaleDateString("es-ES") : "", sesion: s.numero_sesion || (i + 1), zona: "Termografía", tsi: "Neutro", asimetria: 0, url: s.foto, notas: s.notas || "", protocolo: "Termografía" })));
     });
   }, [patient]);
+  // Unificación: la imagen de mayor asimetría alimenta hc.termografia → RESUMEN LIVE / Copiloto / IA
+  useEffect(() => {
+    if (!imagenes.length) return;
+    const peor = imagenes.reduce((a, b) => ((b.asimetria || 0) > (a.asimetria || 0) ? b : a));
+    const tsi = String(peor.tsi || "neutro").toLowerCase().replace(/[áàä]/g,"a").replace(/[éèë]/g,"e").replace(/[íìï]/g,"i").replace(/[óòö]/g,"o").replace(/[úùü]/g,"u");
+    _updHc({ termografia: { tsi, asimetria: Number(peor.asimetria) || 0, zona: peor.zona, fecha: peor.fecha } });
+  }, [imagenes]);
   const [selectedImg, setSelectedImg] = useState(null);
   const [compareA, setCompareA] = useState(null);
   const [compareB, setCompareB] = useState(null);
@@ -2855,7 +2880,7 @@ function runMotorDx(data) {
 
 function MotorCentralPlugin({patient}) {
   const {C} = useApp();
-  const { update: _updHc } = useClinicalRecord(patient);
+  const { hc, update: _updHc } = useClinicalRecord(patient);
   const [guardado,setGuardado]=useState(false);
   const { transcript: mcVoz, listening: mcListen, supported: mcVozOk, start: mcStart, resume: mcResume, stop: mcStop, setTranscript: mcSet } = useSpeechRecognition();
   const [mcAbierto,setMcAbierto]=useState(false);
@@ -2904,15 +2929,26 @@ function MotorCentralPlugin({patient}) {
   const [step,setStep]=useState(0);
   const [running,setRunning]=useState(false);
   const [resultado,setResultado]=useState(null);
-  const [eva,setEva]=useState(0);
-  const [lesiones,setLesiones]=useState({});
-  const [termo,setTermo]=useState({tsi:"neutro",asimetria:0});
-  const [sueno,setSueno]=useState({psqi:0,isi:0,epworth:0});
-  const [vertigo,setVertigo]=useState({dix_hallpike:"negativo",dhi:0,red_flags:false});
-  const [cadenas,setCadenas]=useState({});
-  const [endocrino,setEndocrino]=useState({});
-  const [nutricion,setNutricion]=useState({deficiencias:[]});
-  const [neuro,setNeuro]=useState({dolor_persistente:false,trigger_points:false,fiebre:false,esfinteres:false});
+  // hc = ÚNICA FUENTE DE LA VERDAD. Cada módulo lee de hc y escribe en hc;
+  // el pub/sub re-renderiza RESUMEN LIVE, Copiloto e IA al instante, y persiste al reabrir.
+  const eva = hc.eva || 0;
+  const setEva = (v) => _updHc({ eva: Number(typeof v === "function" ? v(eva) : v) || 0 });
+  const lesiones = hc.lesiones_sospecha || {};
+  const setLesiones = (v) => _updHc({ lesiones_sospecha: typeof v === "function" ? v(lesiones) : v });
+  const termo = (hc.termografia && Object.keys(hc.termografia).length) ? hc.termografia : {tsi:"neutro",asimetria:0};
+  const setTermo = (v) => _updHc({ termografia: typeof v === "function" ? v(termo) : v });
+  const sueno = hc.sueno || {psqi:0,isi:0,epworth:0};
+  const setSueno = (v) => _updHc({ sueno: typeof v === "function" ? v(sueno) : v });
+  const vertigo = hc.vertigo || {dix_hallpike:"negativo",dhi:0,red_flags:false};
+  const setVertigo = (v) => _updHc({ vertigo: typeof v === "function" ? v(vertigo) : v });
+  const cadenas = hc.cadenas || {};
+  const setCadenas = (v) => _updHc({ cadenas: typeof v === "function" ? v(cadenas) : v });
+  const endocrino = hc.endocrino || {};
+  const setEndocrino = (v) => _updHc({ endocrino: typeof v === "function" ? v(endocrino) : v });
+  const nutricion = hc.nutricion || {deficiencias:[]};
+  const setNutricion = (v) => _updHc({ nutricion: typeof v === "function" ? v(nutricion) : v });
+  const neuro = hc.neuro || {dolor_persistente:false,trigger_points:false,fiebre:false,esfinteres:false};
+  const setNeuro = (v) => _updHc({ neuro: typeof v === "function" ? v(neuro) : v });
 
   function ejecutar(){
     setRunning(true);
