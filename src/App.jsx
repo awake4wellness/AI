@@ -4475,17 +4475,76 @@ function ReportePlugin({ patient }) { const { C } = useApp(); const [pdfUrl, set
 // ═══════════════════════════════════════════════════════════════
 // PORTAL DEL PACIENTE (rol "paciente")
 // ═══════════════════════════════════════════════════════════════
+// Paciente de prueba del portal (María López) — se usa cuando no hay un paciente vinculado al login
+const PORTAL_DEMO_PATIENT_ID = "802279a0-2929-4727-9741-7402d2b8f54e";
+
 function PatientPortal({ user, onSignOut }) {
   const C = DS.colors;
-  const yo = DEMO_PATIENTS[0];
-  const misSesiones = DEMO_SESSIONS.filter(s => s.paciente_id === yo.id);
-  const mej = misSesiones.filter(s => s.eva_pre && s.eva_post).length
-    ? Math.round(misSesiones.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / misSesiones.filter(s => s.eva_pre && s.eva_post).length)
-    : 0;
-  const conEva = misSesiones.filter(s => s.eva_pre != null && s.eva_post != null);
-  const evaInicial = conEva.length ? conEva[0].eva_pre : "—";
-  const evaHoy = conEva.length ? conEva[conEva.length - 1].eva_post : "—";
+  const pacienteId = (user && user.paciente_id) || PORTAL_DEMO_PATIENT_ID;
+
+  const [yo, setYo] = useState(null);
+  const [misSesiones, setMisSesiones] = useState([]);
+  const [citas, setCitas] = useState([]);
+  const [reportes, setReportes] = useState([]);
+  const [recos, setRecos] = useState([]);
+  const [cargando, setCargando] = useState(true);
   const [tele, setTele] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const [p, ses, cit, rep, rec] = await Promise.all([
+        CoreServices.query("patients", { id: pacienteId }),
+        CoreServices.query("sessions", { paciente_id: pacienteId }),
+        CoreServices.query("citas", { paciente_id: pacienteId }),
+        CoreServices.query("reportes", { paciente_id: pacienteId }),
+        CoreServices.query("recomendaciones", { paciente_id: pacienteId }),
+      ]);
+      if (!vivo) return;
+      setYo((p.data && p.data[0]) || null);
+      setMisSesiones(ses.data || []);
+      setCitas(cit.data || []);
+      setReportes((rep.data || []).filter(r => r.visible_paciente !== false));
+      setRecos((rec.data || []).filter(r => r.visible_paciente !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0)));
+      setCargando(false);
+    })().catch(() => { if (vivo) setCargando(false); });
+    return () => { vivo = false; };
+  }, [pacienteId]);
+
+  const num = v => (v == null || v === "" ? null : Number(v));
+  const conEva = [...misSesiones]
+    .filter(s => num(s.eva_pre) != null && num(s.eva_post) != null)
+    .sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
+  const evaInicial = conEva.length ? num(conEva[0].eva_pre) : "—";
+  const evaHoy = conEva.length ? num(conEva[conEva.length - 1].eva_post) : "—";
+  const mej = conEva.length
+    ? Math.round(conEva.reduce((a, s) => a + ((num(s.eva_pre) - num(s.eva_post)) / num(s.eva_pre) * 100), 0) / conEva.length)
+    : 0;
+
+  const sesionesOrden = [...misSesiones].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
+  const totalSesiones = misSesiones.length;
+  const protocoloPrincipal = (misSesiones.find(s => s.protocolo) || {}).protocolo || "Tratamiento";
+  const condicion = (yo && yo.condicion_principal) || "Tu tratamiento";
+
+  const ahora = Date.now();
+  const citasOrden = [...citas].filter(c => c.estado !== "cancelada").sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
+  const proxima = citasOrden.find(c => new Date(c.fecha).getTime() >= ahora) || citasOrden[citasOrden.length - 1] || null;
+
+  const nombre = (yo && yo.nombre) || "";
+  const apellido = (yo && yo.apellido) || "";
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  const fmtFechaHora = f => { try { const d = new Date(f); return cap(d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })) + " · " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+  const fmtFecha = f => { try { return new Date(f).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }); } catch { return ""; } };
+
+  if (cargando) {
+    return (
+      <AppCtx.Provider value={{ C, user }}>
+        <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ color: C.muted, fontSize: 14 }}>🌿 Cargando tu portal…</div>
+        </div>
+      </AppCtx.Provider>
+    );
+  }
 
   return (
     <AppCtx.Provider value={{ C, user }}>
@@ -4495,14 +4554,14 @@ function PatientPortal({ user, onSignOut }) {
             <div style={{ width: 34, height: 34, borderRadius: 10, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🌿</div>
             <div><div style={{ fontSize: 15, fontWeight: 800 }}>Awake4Wellness</div><div style={{ fontSize: 11, color: C.muted }}>Portal del Paciente</div></div>
           </div>
-          <button onClick={onSignOut} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Cerrar sesión</button>
+          <button onClick={onSignOut} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>
         </div>
 
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "28px 24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-            <Avatar name={`${yo.nombre} ${yo.apellido}`} size={56} color={C.teal} />
+            <Avatar name={`${nombre} ${apellido}`} size={56} color={C.teal} />
             <div>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Hola, {yo.nombre} 👋</h2>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Hola, {nombre || "paciente"} 👋</h2>
               <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>Paciente · Dr. Cuartas</p>
             </div>
           </div>
@@ -4510,66 +4569,82 @@ function PatientPortal({ user, onSignOut }) {
           {/* Próxima cita */}
           <Card style={{ marginBottom: 16, border: `1px solid ${C.primary}40`, background: dim(C.primary) }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, color: C.primary, letterSpacing: 1, marginBottom: 10 }}>📅 TU PRÓXIMA CITA</div>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>Lunes 29 de junio · 10:00 am</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Sesión HILT · Consultorio Awake4</div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <Btn color={C.success} onClick={() => alert("✓ Cita confirmada. ¡Te esperamos!")} style={{ flex: 1, padding: "9px" }}>✓ Confirmar</Btn>
-              <Btn color={C.muted} onClick={() => alert("Te contactaremos para reagendar tu cita.")} style={{ flex: 1, padding: "9px" }}>📅 Reagendar</Btn>
-            </div>
+            {proxima ? (<>
+              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>{fmtFechaHora(proxima.fecha)}</div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>{proxima.protocolo ? `Sesión ${proxima.protocolo}` : (proxima.tipo || "Cita")} · Consultorio Awake4</div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <Btn color={C.success} onClick={() => alert("✓ Cita confirmada. ¡Te esperamos!")} style={{ flex: 1, padding: "9px" }}>✓ Confirmar</Btn>
+                <Btn color={C.muted} onClick={() => alert("Te contactaremos para reagendar tu cita.")} style={{ flex: 1, padding: "9px" }}>📅 Reagendar</Btn>
+              </div>
+            </>) : (
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>No tienes citas programadas. Te avisaremos cuando agendemos la próxima.</div>
+            )}
           </Card>
 
           {/* Mi progreso del dolor */}
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>💗 MI PROGRESO DEL DOLOR</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-              <div><div style={{ fontSize: 11, color: C.muted }}>Al iniciar</div><div style={{ fontSize: 26, fontWeight: 800 }}>EVA {evaInicial}</div></div>
-              <div style={{ fontSize: 22, color: C.dim }}>→</div>
-              <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: C.muted }}>Hoy</div><div style={{ fontSize: 26, fontWeight: 800, color: C.success }}>EVA {evaHoy}</div></div>
-              <Badge color={C.success}>↓ {mej}% menos dolor</Badge>
-            </div>
+            {conEva.length ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div><div style={{ fontSize: 11, color: C.muted }}>Al iniciar</div><div style={{ fontSize: 26, fontWeight: 800 }}>EVA {evaInicial}</div></div>
+                <div style={{ fontSize: 22, color: C.dim }}>→</div>
+                <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: C.muted }}>Hoy</div><div style={{ fontSize: 26, fontWeight: 800, color: C.success }}>EVA {evaHoy}</div></div>
+                <Badge color={mej >= 0 ? C.success : C.warning}>{mej >= 0 ? "↓" : "↑"} {Math.abs(mej)}% {mej >= 0 ? "menos" : "más"} dolor</Badge>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Aún no hay mediciones de dolor registradas.</div>
+            )}
           </Card>
 
-          {/* Mi plan */}
+          {/* Mi plan / tratamiento */}
           <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>⚡ MI PLAN ACTUAL</div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>⚡ MI TRATAMIENTO</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: dim(C.warning), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>⚡</div>
-              <div><div style={{ fontSize: 14, fontWeight: 800 }}>HILT — Tendinopatía rotuliana</div><div style={{ fontSize: 12, color: C.muted }}>Sesión 7 de 8 · 3x semana</div></div>
+              <div><div style={{ fontSize: 14, fontWeight: 800 }}>{cap(condicion)}</div><div style={{ fontSize: 12, color: C.muted }}>Protocolo {protocoloPrincipal} · {totalSesiones} {totalSesiones === 1 ? "sesión realizada" : "sesiones realizadas"}</div></div>
             </div>
-            <ProgressBar value={(7 / 8) * 100} color={C.warning} />
           </Card>
 
           {/* Mis reportes */}
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 10 }}>📄 MIS REPORTES</div>
-            {[{ n: "Informe termográfico", f: "13 jun 2026" }, { n: "Resultado de sesión HILT", f: "23 jun 2026" }].map((r, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i === 0 ? `1px solid ${C.border}` : "none" }}>
-                <div><div style={{ fontSize: 13, fontWeight: 700 }}>{r.n}</div><div style={{ fontSize: 11, color: C.muted }}>{r.f}</div></div>
+            {reportes.length ? reportes.map((r, i) => (
+              <div key={r.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < reportes.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <div><div style={{ fontSize: 13, fontWeight: 700 }}>{r.titulo || "Reporte"}</div><div style={{ fontSize: 11, color: C.muted }}>{fmtFecha(r.fecha)}</div></div>
                 <button onClick={() => alert("Pronto vas a poder descargar tus reportes en PDF desde aquí.")} title="Descargar" style={{ background: "none", border: "none", color: C.primary, cursor: "pointer", fontSize: 18 }}>⬇️</button>
               </div>
-            ))}
+            )) : (
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Aún no tienes reportes disponibles.</div>
+            )}
           </Card>
 
           {/* Recomendaciones */}
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>📋 RECOMENDACIONES DEL DR. CUARTAS</div>
-            {["Aplica hielo 15 min después de los ejercicios.", "Camina 20 min, 3 veces por semana.", "Evita cremas en la zona a tratar antes de la sesión."].map((t, i) => (
-              <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8 }}>
+            {recos.length ? recos.map((r, i) => (
+              <div key={r.id || i} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8 }}>
                 <span style={{ color: C.success, fontSize: 14 }}>✓</span>
-                <span style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{t}</span>
+                <span style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{r.texto}</span>
               </div>
-            ))}
+            )) : (
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Tu médico aún no ha agregado recomendaciones.</div>
+            )}
           </Card>
 
           {/* Mi evolución */}
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>📈 MI EVOLUCIÓN</div>
-            {misSesiones.map(s => (
-              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                <div><div style={{ fontSize: 13, fontWeight: 700 }}>Sesión {s.numero_sesion} · {s.protocolo}</div><div style={{ fontSize: 11, color: C.muted }}>{new Date(s.fecha).toLocaleDateString("es-ES")}</div></div>
-                <Badge color={s.eva_post < s.eva_pre ? C.success : C.warning}>EVA {s.eva_pre}→{s.eva_post}</Badge>
+            {sesionesOrden.length ? sesionesOrden.slice(0, 8).map((s, i) => (
+              <div key={s.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div><div style={{ fontSize: 13, fontWeight: 700 }}>Sesión {s.numero_sesion || (i + 1)}{s.protocolo ? ` · ${s.protocolo}` : ""}</div><div style={{ fontSize: 11, color: C.muted }}>{fmtFecha(s.fecha)}</div></div>
+                {num(s.eva_pre) != null && num(s.eva_post) != null
+                  ? <Badge color={num(s.eva_post) < num(s.eva_pre) ? C.success : C.warning}>EVA {num(s.eva_pre)}→{num(s.eva_post)}</Badge>
+                  : <span style={{ fontSize: 11, color: C.dim }}>—</span>}
               </div>
-            ))}
+            )) : (
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Aún no hay sesiones registradas.</div>
+            )}
+            {sesionesOrden.length > 8 && <div style={{ fontSize: 11, color: C.dim, marginTop: 10 }}>Mostrando tus últimas 8 sesiones.</div>}
           </Card>
 
           <Btn color={C.teal} fullWidth onClick={() => setTele(true)} style={{ padding: "13px" }}>📱 Iniciar consulta de telemedicina</Btn>
