@@ -2928,6 +2928,21 @@ function MotorCentralPlugin({patient}) {
   const [endocrino,setEndocrino]=useState({});
   const [nutricion,setNutricion]=useState({deficiencias:[]});
   const [neuro,setNeuro]=useState({dolor_persistente:false,trigger_points:false,fiebre:false,esfinteres:false});
+  // Cargar los datos guardados del paciente al abrir, para que el RESUMEN LIVE no arranque en 0
+  useEffect(() => {
+    if (!patient || !patient.id) return;
+    CoreServices.query("clinical_records", { paciente_id: patient.id }).then(({ data }) => {
+      const d = data && data[0] && data[0].datos;
+      if (!d) return;
+      if (d.eva != null) setEva(Number(d.eva) || 0);
+      if (d.lesiones_sospecha) setLesiones(d.lesiones_sospecha);
+      if (d.termografia && typeof d.termografia === "object") setTermo(t => ({ ...t, ...d.termografia }));
+      setSueno(s => ({ ...s, psqi: Number(d.psqi) || 0, isi: Number(d.isi) || 0, epworth: Number(d.epworth) || 0 }));
+      setVertigo(v => ({ ...v, dhi: Number(d.dhi) || 0, dix_hallpike: d.dix_hallpike || v.dix_hallpike, red_flags: !!d.red_flags }));
+      if (d.cadenas) setCadenas(d.cadenas);
+      if (d.neuro) setNeuro(n => ({ ...n, ...d.neuro }));
+    }).catch(() => {});
+  }, [patient && patient.id]);
 
   function ejecutar(){
     setRunning(true);
