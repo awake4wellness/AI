@@ -4595,6 +4595,7 @@ function ReportePlugin({ patient }) { const { C } = useApp(); const [pdfUrl, set
 // ═══════════════════════════════════════════════════════════════
 // Paciente de prueba del portal (María López) — se usa cuando no hay un paciente vinculado al login
 const PORTAL_DEMO_PATIENT_ID = "802279a0-2929-4727-9741-7402d2b8f54e";
+const PORTAL_DEMO_TOKEN = "389f920319664776b3871f501cf524a13d8fd44cc0e340c9835dce4ebed1247b";
 
 // Loader: portal del paciente logueado (rol "paciente") — datos por consulta normal
 function PatientPortal({ user, onSignOut }) {
@@ -4627,7 +4628,7 @@ function PatientPortal({ user, onSignOut }) {
 }
 
 // Loader: portal por link/QR (?p=token) — datos por función segura, sin login
-function PortalToken({ token }) {
+function PortalToken({ token, onSignOut }) {
   const C = DS.colors;
   const [estado, setEstado] = useState({ cargando: true, datos: null });
   useEffect(() => {
@@ -4650,7 +4651,7 @@ function PortalToken({ token }) {
     </div>
   );
   const dd = estado.datos;
-  return <PortalVista yo={dd.paciente} sesiones={dd.sesiones || []} citas={dd.citas || []} reportes={dd.reportes || []} recos={dd.recomendaciones || []} />;
+  return <PortalVista yo={dd.paciente} sesiones={dd.sesiones || []} citas={dd.citas || []} reportes={dd.reportes || []} recos={dd.recomendaciones || []} onSignOut={onSignOut} />;
 }
 
 function PortalCargando({ C, user }) {
@@ -4957,7 +4958,7 @@ export default function App() {
   if (portalToken) return <PortalToken token={portalToken} />;
 
   if (!user) return <LoginScreen onLogin={setUser} />;
-  if (user.rol === "paciente") return <PatientPortal user={user} onSignOut={signOut} />;
+  if (user.rol === "paciente") return <PortalToken token={user.paciente_token || PORTAL_DEMO_TOKEN} onSignOut={signOut} />;
 
   const rol = user.rol || "medico";
   const visiblePlugins = pluginRegistry.filter(p => rol === "admin" ? true : p.badge !== "Admin");
