@@ -315,6 +315,10 @@ export const CoreServices = {
     return d;
   },
   signOut() { localStorage.removeItem("a4w_token"); localStorage.removeItem("a4w_user"); localStorage.removeItem("a4w_refresh"); localStorage.removeItem("a4w_expires"); },
+  async rpc(fn, args) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }, body: JSON.stringify(args || {}) });
+    try { return await r.json(); } catch { return null; }
+  },
   getUser() { try { return JSON.parse(localStorage.getItem("a4w_user")); } catch { return null; } },
   getToken() { return localStorage.getItem("a4w_token"); }, async getValidToken() { const exp = Number(localStorage.getItem("a4w_expires") || 0); const tok = localStorage.getItem("a4w_token"); if (tok && Date.now() < exp - 60000) return tok; const rt = localStorage.getItem("a4w_refresh"); if (!rt) return tok; if (!this._refreshPromise) { this._refreshPromise = fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY }, body: JSON.stringify({ refresh_token: rt }) }).then(r => r.json()).then(d => { if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_refresh", d.refresh_token || rt); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); } this._refreshPromise = null; return d.access_token || tok; }).catch(() => { this._refreshPromise = null; return tok; }); } return this._refreshPromise; },
 
@@ -4478,18 +4482,11 @@ function ReportePlugin({ patient }) { const { C } = useApp(); const [pdfUrl, set
 // Paciente de prueba del portal (María López) — se usa cuando no hay un paciente vinculado al login
 const PORTAL_DEMO_PATIENT_ID = "802279a0-2929-4727-9741-7402d2b8f54e";
 
+// Loader: portal del paciente logueado (rol "paciente") — datos por consulta normal
 function PatientPortal({ user, onSignOut }) {
   const C = DS.colors;
   const pacienteId = (user && user.paciente_id) || PORTAL_DEMO_PATIENT_ID;
-
-  const [yo, setYo] = useState(null);
-  const [misSesiones, setMisSesiones] = useState([]);
-  const [citas, setCitas] = useState([]);
-  const [reportes, setReportes] = useState([]);
-  const [recos, setRecos] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [tele, setTele] = useState(false);
-
+  const [d, setD] = useState(null);
   useEffect(() => {
     let vivo = true;
     (async () => {
@@ -4501,15 +4498,62 @@ function PatientPortal({ user, onSignOut }) {
         CoreServices.query("recomendaciones", { paciente_id: pacienteId }),
       ]);
       if (!vivo) return;
-      setYo((p.data && p.data[0]) || null);
-      setMisSesiones(ses.data || []);
-      setCitas(cit.data || []);
-      setReportes((rep.data || []).filter(r => r.visible_paciente !== false));
-      setRecos((rec.data || []).filter(r => r.visible_paciente !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0)));
-      setCargando(false);
-    })().catch(() => { if (vivo) setCargando(false); });
+      setD({
+        yo: (p.data && p.data[0]) || null,
+        sesiones: ses.data || [],
+        citas: cit.data || [],
+        reportes: (rep.data || []).filter(r => r.visible_paciente !== false),
+        recos: (rec.data || []).filter(r => r.visible_paciente !== false).sort((a, b) => (a.orden || 0) - (b.orden || 0)),
+      });
+    })().catch(() => { if (vivo) setD({ yo: null, sesiones: [], citas: [], reportes: [], recos: [] }); });
     return () => { vivo = false; };
   }, [pacienteId]);
+  if (!d) return <PortalCargando C={C} user={user} />;
+  return <PortalVista user={user} onSignOut={onSignOut} {...d} />;
+}
+
+// Loader: portal por link/QR (?p=token) — datos por función segura, sin login
+function PortalToken({ token }) {
+  const C = DS.colors;
+  const [estado, setEstado] = useState({ cargando: true, datos: null });
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const r = await CoreServices.rpc("portal_datos", { p_token: token });
+      if (!vivo) return;
+      setEstado({ cargando: false, datos: (r && r.paciente) ? r : null });
+    })().catch(() => { if (vivo) setEstado({ cargando: false, datos: null }); });
+    return () => { vivo = false; };
+  }, [token]);
+  if (estado.cargando) return <PortalCargando C={C} />;
+  if (!estado.datos) return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ textAlign: "center", maxWidth: 360 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 6 }}>Enlace no válido o vencido</div>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Pídele a tu médico que te comparta de nuevo tu acceso al portal.</div>
+      </div>
+    </div>
+  );
+  const dd = estado.datos;
+  return <PortalVista yo={dd.paciente} sesiones={dd.sesiones || []} citas={dd.citas || []} reportes={dd.reportes || []} recos={dd.recomendaciones || []} />;
+}
+
+function PortalCargando({ C, user }) {
+  return (
+    <AppCtx.Provider value={{ C, user }}>
+      <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: C.muted, fontSize: 14 }}>🌿 Cargando tu portal…</div>
+      </div>
+    </AppCtx.Provider>
+  );
+}
+
+// Presentación compartida del portal del paciente
+function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos }) {
+  const C = DS.colors;
+  const misSesiones = sesiones || [];
+  const [tele, setTele] = useState(false);
 
   const num = v => (v == null || v === "" ? null : Number(v));
   const conEva = [...misSesiones]
@@ -4536,16 +4580,6 @@ function PatientPortal({ user, onSignOut }) {
   const fmtFechaHora = f => { try { const d = new Date(f); return cap(d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })) + " · " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
   const fmtFecha = f => { try { return new Date(f).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }); } catch { return ""; } };
 
-  if (cargando) {
-    return (
-      <AppCtx.Provider value={{ C, user }}>
-        <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ color: C.muted, fontSize: 14 }}>🌿 Cargando tu portal…</div>
-        </div>
-      </AppCtx.Provider>
-    );
-  }
-
   return (
     <AppCtx.Provider value={{ C, user }}>
       <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>
@@ -4554,7 +4588,7 @@ function PatientPortal({ user, onSignOut }) {
             <div style={{ width: 34, height: 34, borderRadius: 10, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🌿</div>
             <div><div style={{ fontSize: 15, fontWeight: 800 }}>Awake4Wellness</div><div style={{ fontSize: 11, color: C.muted }}>Portal del Paciente</div></div>
           </div>
-          <button onClick={onSignOut} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>
+          {onSignOut && <button onClick={onSignOut} style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>}
         </div>
 
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "28px 24px" }}>
@@ -4803,6 +4837,10 @@ export default function App() {
   }
 
   function signOut() { CoreServices.signOut(); setUser(null); }
+
+  // Acceso por link/QR: awake4.app/?p=TOKEN abre el portal del paciente sin login
+  const portalToken = new URLSearchParams(window.location.search).get("p");
+  if (portalToken) return <PortalToken token={portalToken} />;
 
   if (!user) return <LoginScreen onLogin={setUser} />;
   if (user.rol === "paciente") return <PatientPortal user={user} onSignOut={signOut} />;
