@@ -4482,6 +4482,9 @@ function PatientPortal({ user, onSignOut }) {
   const mej = misSesiones.filter(s => s.eva_pre && s.eva_post).length
     ? Math.round(misSesiones.filter(s => s.eva_pre && s.eva_post).reduce((a, s) => a + ((s.eva_pre - s.eva_post) / s.eva_pre * 100), 0) / misSesiones.filter(s => s.eva_pre && s.eva_post).length)
     : 0;
+  const conEva = misSesiones.filter(s => s.eva_pre != null && s.eva_post != null);
+  const evaInicial = conEva.length ? conEva[0].eva_pre : "—";
+  const evaHoy = conEva.length ? conEva[conEva.length - 1].eva_post : "—";
   const [tele, setTele] = useState(false);
 
   return (
@@ -4500,30 +4503,67 @@ function PatientPortal({ user, onSignOut }) {
             <Avatar name={`${yo.nombre} ${yo.apellido}`} size={56} color={C.teal} />
             <div>
               <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Hola, {yo.nombre} 👋</h2>
-              <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>{yo.a}</p>
+              <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>Paciente · Dr. Cuartas</p>
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
-            <StatCard label="Sesiones" value={misSesiones.length} color={C.primary} icon="📅" sub="completadas" />
-            <StatCard label="Mejoría" value={`${mej}%`} color={C.success} icon="📈" sub="reducción dolor" />
-            <StatCard label="Próxima cita" value="2 días" color={C.teal} icon="⏰" sub="HILT 15:00" />
-          </div>
+          {/* Próxima cita */}
+          <Card style={{ marginBottom: 16, border: `1px solid ${C.primary}40`, background: dim(C.primary) }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, color: C.primary, letterSpacing: 1, marginBottom: 10 }}>📅 TU PRÓXIMA CITA</div>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>Lunes 29 de junio · 10:00 am</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Sesión HILT · Consultorio Awake4</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn color={C.success} onClick={() => alert("✓ Cita confirmada. ¡Te esperamos!")} style={{ flex: 1, padding: "9px" }}>✓ Confirmar</Btn>
+              <Btn color={C.muted} onClick={() => alert("Te contactaremos para reagendar tu cita.")} style={{ flex: 1, padding: "9px" }}>📅 Reagendar</Btn>
+            </div>
+          </Card>
 
+          {/* Mi progreso del dolor */}
           <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>MI PROTOCOLO ACTUAL</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>💗 MI PROGRESO DEL DOLOR</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+              <div><div style={{ fontSize: 11, color: C.muted }}>Al iniciar</div><div style={{ fontSize: 26, fontWeight: 800 }}>EVA {evaInicial}</div></div>
+              <div style={{ fontSize: 22, color: C.dim }}>→</div>
+              <div style={{ textAlign: "center" }}><div style={{ fontSize: 11, color: C.muted }}>Hoy</div><div style={{ fontSize: 26, fontWeight: 800, color: C.success }}>EVA {evaHoy}</div></div>
+              <Badge color={C.success}>↓ {mej}% menos dolor</Badge>
+            </div>
+          </Card>
+
+          {/* Mi plan */}
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>⚡ MI PLAN ACTUAL</div>
             <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: dim(C.warning), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>⚡</div>
               <div><div style={{ fontSize: 14, fontWeight: 800 }}>HILT — Tendinopatía rotuliana</div><div style={{ fontSize: 12, color: C.muted }}>Sesión 7 de 8 · 3x semana</div></div>
             </div>
             <ProgressBar value={(7 / 8) * 100} color={C.warning} />
-            <div style={{ marginTop: 12, fontSize: 12, color: C.muted, lineHeight: 1.7 }}>
-              Llega 10 min antes de cada sesión. Evita cremas en la zona a tratar. Aplica hielo 15 min en casa post-sesión.
-            </div>
           </Card>
 
+          {/* Mis reportes */}
           <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>MI EVOLUCIÓN</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 10 }}>📄 MIS REPORTES</div>
+            {[{ n: "Informe termográfico", f: "13 jun 2026" }, { n: "Resultado de sesión HILT", f: "23 jun 2026" }].map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i === 0 ? `1px solid ${C.border}` : "none" }}>
+                <div><div style={{ fontSize: 13, fontWeight: 700 }}>{r.n}</div><div style={{ fontSize: 11, color: C.muted }}>{r.f}</div></div>
+                <button onClick={() => alert("Pronto vas a poder descargar tus reportes en PDF desde aquí.")} title="Descargar" style={{ background: "none", border: "none", color: C.primary, cursor: "pointer", fontSize: 18 }}>⬇️</button>
+              </div>
+            ))}
+          </Card>
+
+          {/* Recomendaciones */}
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>📋 RECOMENDACIONES DEL DR. CUARTAS</div>
+            {["Aplica hielo 15 min después de los ejercicios.", "Camina 20 min, 3 veces por semana.", "Evita cremas en la zona a tratar antes de la sesión."].map((t, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8 }}>
+                <span style={{ color: C.success, fontSize: 14 }}>✓</span>
+                <span style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{t}</span>
+              </div>
+            ))}
+          </Card>
+
+          {/* Mi evolución */}
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 14 }}>📈 MI EVOLUCIÓN</div>
             {misSesiones.map(s => (
               <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
                 <div><div style={{ fontSize: 13, fontWeight: 700 }}>Sesión {s.numero_sesion} · {s.protocolo}</div><div style={{ fontSize: 11, color: C.muted }}>{new Date(s.fecha).toLocaleDateString("es-ES")}</div></div>
@@ -4744,6 +4784,7 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 12, color: C.muted }}>{DEMO_CREDENTIALS[rol]?.icon} {user.email}</span>
               <Avatar name={user.email} size={30} color={DEMO_CREDENTIALS[rol]?.color || C.primary} />
+              <button onClick={signOut} title="Salir y volver a la pantalla de inicio" style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>
             </div>
           </div>
 
