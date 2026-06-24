@@ -4625,8 +4625,18 @@ function LoginScreen({ onLogin }) {
   async function entrar() {
     setLoading(true); setError("");
     try {
-      const d = await CoreServices.signIn(email, pass); if (!d || !d.access_token) { setError("Correo o contraseña incorrectos."); setLoading(false); return; } if (!d || !d.access_token) { setError("Correo o contraseña incorrectos."); setLoading(false); return; }
-      const user = { email, id: "demo", rol };
+      const demo = DEMO_CREDENTIALS[rol];
+      const esDemo = demo && email.trim().toLowerCase() === demo.email && pass === demo.pass;
+      if (esDemo) {
+        // Acceso demo precargado: no requiere cuenta en Supabase (los datos se leen con la clave pública)
+        const user = { email: demo.email, id: "demo", rol };
+        localStorage.setItem("a4w_user", JSON.stringify(user));
+        onLogin(user);
+        return;
+      }
+      const d = await CoreServices.signIn(email, pass);
+      if (!d || !d.access_token) { setError("Correo o contraseña incorrectos."); return; }
+      const user = { email, id: (d.user && d.user.id) || "user", rol };
       localStorage.setItem("a4w_user", JSON.stringify(user));
       onLogin(user);
     } catch (e) {
