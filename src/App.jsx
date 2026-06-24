@@ -4800,7 +4800,7 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
             {proxima ? (<>
               <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>{fmtFechaHora(proxima.fecha)}</div>
               <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{proxima.protocolo ? `Sesión ${proxima.protocolo}` : (proxima.tipo || "Cita")} · Consultorio Awake4</div>
-              <div style={{ marginBottom: 12 }}><Badge color={(citaEstado || proxima.estado) === "confirmada" ? C.success : C.warning}>{citaEstado || proxima.estado || "programada"}</Badge></div>
+              <div style={{ marginBottom: 12 }}><Badge color={(citaEstado || proxima.estado) === "confirmada" ? C.success : C.warning}>{({ confirmada: "✓ Confirmada", solicitada: "⏳ Pendiente de confirmar", reprogramada: "Reprogramada", cumplida: "Cumplida" })[citaEstado || proxima.estado] || "Programada"}</Badge></div>
               <div style={{ display: "flex", gap: 10 }}>
                 <Btn color={C.success} onClick={() => confirmarCita(proxima.id)} style={{ flex: 1, padding: "9px" }}>✓ Confirmar</Btn>
                 <Btn color={C.muted} onClick={() => setReagendar(v => !v)} style={{ flex: 1, padding: "9px" }}>📅 Reagendar</Btn>
