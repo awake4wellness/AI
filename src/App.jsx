@@ -4726,7 +4726,7 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos }) 
 // ═══════════════════════════════════════════════════════════════
 const DEMO_CREDENTIALS = {
   admin:    { email: "admin@awake4wellness.com",    pass: "Admin2024!",    label: "Administrador", icon: "👑", color: DS.colors.warning },
-  medico:   { email: "doctor@awake4wellness.com",   pass: "Medico2024!",   label: "Médico",        icon: "👨‍⚕️", color: DS.colors.primary },
+  medico:   { email: "javiercuartasjaller@gmail.com", pass: "",   label: "Médico",        icon: "👨‍⚕️", color: DS.colors.primary },
   paciente: { email: "paciente@awake4wellness.com", pass: "Paciente2024!", label: "Paciente",      icon: "🧑", color: DS.colors.teal },
 };
 
@@ -4767,7 +4767,7 @@ function LoginScreen({ onLogin }) {
     setLoading(true); setError("");
     try {
       const demo = DEMO_CREDENTIALS[rol];
-      const esDemo = demo && email.trim().toLowerCase() === demo.email && pass === demo.pass;
+      const esDemo = demo && demo.pass && email.trim().toLowerCase() === demo.email && pass === demo.pass;
       if (esDemo) {
         // Acceso demo precargado: no requiere cuenta en Supabase (los datos se leen con la clave pública)
         const user = { email: demo.email, id: "demo", rol };
