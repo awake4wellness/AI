@@ -342,6 +342,11 @@ export const CoreServices = {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}` } });
     return { ok: r.ok };
   },
+  async setConfig(clave, valor) {
+    const token = await this.getValidToken();
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/config?on_conflict=clave`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Prefer": "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ clave, valor }) });
+    return { ok: r.ok };
+  },
   getUser() { try { return JSON.parse(localStorage.getItem("a4w_user")); } catch { return null; } },
   getToken() { return localStorage.getItem("a4w_token"); }, async getValidToken() { const exp = Number(localStorage.getItem("a4w_expires") || 0); const tok = localStorage.getItem("a4w_token"); if (tok && Date.now() < exp - 60000) return tok; const rt = localStorage.getItem("a4w_refresh"); if (!rt) return tok; if (!this._refreshPromise) { this._refreshPromise = fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY }, body: JSON.stringify({ refresh_token: rt }) }).then(r => r.json()).then(d => { if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_refresh", d.refresh_token || rt); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); } this._refreshPromise = null; return d.access_token || tok; }).catch(() => { this._refreshPromise = null; return tok; }); } return this._refreshPromise; },
 
@@ -4710,7 +4715,7 @@ function PortalToken({ token, onSignOut }) {
     </div>
   );
   const dd = estado.datos;
-  return <PortalVista yo={dd.paciente} sesiones={dd.sesiones || []} citas={dd.citas || []} reportes={dd.reportes || []} recos={dd.recomendaciones || []} onSignOut={onSignOut} token={token} />;
+  return <PortalVista yo={dd.paciente} sesiones={dd.sesiones || []} citas={dd.citas || []} reportes={dd.reportes || []} recos={dd.recomendaciones || []} onSignOut={onSignOut} token={token} clinica={dd.clinica} />;
 }
 
 function PortalCargando({ C, user }) {
@@ -4724,7 +4729,7 @@ function PortalCargando({ C, user }) {
 }
 
 // Presentación compartida del portal del paciente
-function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, token }) {
+function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, token, clinica }) {
   const C = DS.colors;
   const misSesiones = sesiones || [];
   const [tele, setTele] = useState(false);
@@ -4888,8 +4893,18 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
             {sesionesOrden.length > 8 && <div style={{ fontSize: 11, color: C.dim, marginTop: 10 }}>Mostrando tus últimas 8 sesiones.</div>}
           </Card>
 
-          <Btn color={C.teal} fullWidth onClick={() => setTele(true)} style={{ padding: "13px" }}>📱 Iniciar consulta de telemedicina</Btn>
-          {tele && <Modal open={tele} onClose={() => setTele(false)} title="Telemedicina"><div style={{ textAlign: "center", padding: 20 }}><div style={{ fontSize: 40, marginBottom: 12 }}>📹</div><div style={{ fontSize: 13, color: C.muted }}>Tu médico se conectará a la hora de tu cita. Recibirás un aviso cuando la sala esté lista.</div></div></Modal>}
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>📱 TELECONSULTA</div>
+            {(clinica && (clinica.whatsapp || clinica.telefono)) ? (<>
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>¿Necesitás hablar con tu médico? Llamá directo:</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {clinica.whatsapp && <Btn color={C.success} onClick={() => window.open(`https://wa.me/${(clinica.whatsapp || "").replace(/\D/g, "")}?text=${encodeURIComponent("Hola, soy " + (nombre || "") + ", quisiera una teleconsulta.")}`, "_blank")} style={{ flex: "1 1 150px", padding: "12px" }}>📱 WhatsApp</Btn>}
+                {clinica.telefono && <Btn color={C.primary} onClick={() => window.open(`tel:${(clinica.telefono || "").replace(/[^\d+]/g, "")}`)} style={{ flex: "1 1 150px", padding: "12px" }}>📞 Llamar</Btn>}
+              </div>
+            </>) : (
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Tu médico aún no activó la teleconsulta.</div>
+            )}
+          </Card>
         </div>
       </div>
     </AppCtx.Provider>
@@ -5009,6 +5024,7 @@ export default function App() {
   const [patients, setPatients] = useState(DEMO_PATIENTS);
   const [sessions, setSessions] = useState(DEMO_SESSIONS);
   const [notis, setNotis] = useState([]); const [showNotis, setShowNotis] = useState(false);
+  const [showConfig, setShowConfig] = useState(false); const [configForm, setConfigForm] = useState({ whatsapp: "", telefono: "" }); const [guardandoConfig, setGuardandoConfig] = useState(false);
 
   useEffect(() => {
     if (!user || (user.rol !== "medico" && user.rol !== "admin")) return;
@@ -5026,6 +5042,20 @@ export default function App() {
     if (!pendientes.length) return;
     setNotis(prev => prev.map(n => ({ ...n, leido: true })));
     for (const n of pendientes) await CoreServices.update("notificaciones", n.id, { leido: true });
+  }
+  async function abrirConfig() {
+    setShowConfig(true);
+    const { data } = await CoreServices.query("config");
+    const map = {}; (data || []).forEach(c => { map[c.clave] = c.valor; });
+    setConfigForm({ whatsapp: map.whatsapp || "", telefono: map.telefono || "" });
+  }
+  async function guardarConfig() {
+    setGuardandoConfig(true);
+    await CoreServices.setConfig("whatsapp", configForm.whatsapp || "");
+    await CoreServices.setConfig("telefono", configForm.telefono || "");
+    setGuardandoConfig(false);
+    setShowConfig(false);
+    alert("✓ Datos de teleconsulta guardados. Ya aparecen en el portal del paciente.");
   }
 
   useEffect(() => {
@@ -5088,6 +5118,20 @@ export default function App() {
   return (
     <AppCtx.Provider value={{ C, user }}>
       <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>{verBienvenida && <BienvenidaMini C={C} onCerrar={() => setVerBienvenida(false)} />}
+        <Modal open={showConfig} onClose={() => setShowConfig(false)} title="Teleconsulta · Tus datos de contacto" width={460}>
+          <div style={{ padding: "2px 2px 6px" }}>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 16 }}>Estos números aparecen en el portal del paciente para que te llame por WhatsApp o teléfono. Poné el código de país (ej: +57 o +1).</div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>📱 WhatsApp</div>
+              <input value={configForm.whatsapp} onChange={e => setConfigForm({ ...configForm, whatsapp: e.target.value })} placeholder="+57 300 123 4567" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14 }} />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>📞 Teléfono</div>
+              <input value={configForm.telefono} onChange={e => setConfigForm({ ...configForm, telefono: e.target.value })} placeholder="+57 300 123 4567" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14 }} />
+            </div>
+            <Btn color={C.teal} fullWidth onClick={guardarConfig} disabled={guardandoConfig} style={{ padding: "11px" }}>{guardandoConfig ? "Guardando…" : "Guardar"}</Btn>
+          </div>
+        </Modal>
         {/* Sidebar */}
         <div style={{ width: compacto ? 72 : 240, borderRight: `1px solid ${C.border}`, padding: "18px 14px", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", boxSizing: "border-box", overflowY: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "0 6px" }}>
@@ -5149,6 +5193,7 @@ export default function App() {
                   </div>
                 )}
               </div>
+              <button onClick={abrirConfig} title="Configurar teleconsulta (WhatsApp / teléfono)" style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "6px 10px", fontSize: 15, cursor: "pointer" }}>⚙️</button>
               <span style={{ fontSize: 12, color: C.muted }}>{DEMO_CREDENTIALS[rol]?.icon} {user.email}</span>
               <Avatar name={user.email} size={30} color={DEMO_CREDENTIALS[rol]?.color || C.primary} />
               <button onClick={signOut} title="Salir y volver a la pantalla de inicio" style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>
