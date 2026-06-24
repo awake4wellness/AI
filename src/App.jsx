@@ -1696,7 +1696,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
       if (error) { alert("No se pudo generar el acceso: " + (error.message || "error")); return; }
       patient.portal_token = token;
     }
-    setAccesoUrl(`${window.location.origin}/?p=${token}`);
+    setAccesoUrl(`${window.location.origin}/p/${token}`);
     setShowAcceso(true);
   }
   async function abrirReportes() {
@@ -4953,7 +4953,7 @@ export default function App() {
   function signOut() { CoreServices.signOut(); setUser(null); }
 
   // Acceso por link/QR: awake4.app/?p=TOKEN abre el portal del paciente sin login
-  const portalToken = new URLSearchParams(window.location.search).get("p");
+  const portalToken = new URLSearchParams(window.location.search).get("p") || (window.location.pathname.match(/^\/p\/([^/?#]+)/) || [])[1] || null;
   if (portalToken) return <PortalToken token={portalToken} />;
 
   if (!user) return <LoginScreen onLogin={setUser} />;
