@@ -320,6 +320,18 @@ export const CoreServices = {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }, body: JSON.stringify(args || {}) });
     try { return await r.json(); } catch { return null; }
   },
+  async subirArchivo(bucket, path, file) {
+    const token = await this.getValidToken();
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file });
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok, error: r.ok ? null : (d.message || d.error || "error al subir"), data: d };
+  },
+  async firmarUrl(bucket, path, expiresIn = 315360000) {
+    const token = await this.getValidToken();
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn }) });
+    const d = await r.json().catch(() => ({}));
+    return d.signedURL ? (SUPABASE_URL + d.signedURL) : null;
+  },
   getUser() { try { return JSON.parse(localStorage.getItem("a4w_user")); } catch { return null; } },
   getToken() { return localStorage.getItem("a4w_token"); }, async getValidToken() { const exp = Number(localStorage.getItem("a4w_expires") || 0); const tok = localStorage.getItem("a4w_token"); if (tok && Date.now() < exp - 60000) return tok; const rt = localStorage.getItem("a4w_refresh"); if (!rt) return tok; if (!this._refreshPromise) { this._refreshPromise = fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY }, body: JSON.stringify({ refresh_token: rt }) }).then(r => r.json()).then(d => { if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_refresh", d.refresh_token || rt); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); } this._refreshPromise = null; return d.access_token || tok; }).catch(() => { this._refreshPromise = null; return tok; }); } return this._refreshPromise; },
 
@@ -1657,6 +1669,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
   const [tab, setTab] = useState("sesiones"); const [verBienvenida, setVerBienvenida] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showAcceso, setShowAcceso] = useState(false); const [accesoUrl, setAccesoUrl] = useState(""); const [generando, setGenerando] = useState(false);
+  const [showReportes, setShowReportes] = useState(false); const [reportesPac, setReportesPac] = useState([]); const [subiendoRep, setSubiendoRep] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ protocolo: "HILT", eva_pre: 5, eva_post: 3, notas: "", duracion_minutos: 30, subjetivo: "", objetivo: "", analisis: "", plan: "" }); const [showEdit, setShowEdit] = useState(false); const [savingEdit, setSavingEdit] = useState(false); const [showCaso, setShowCaso] = useState(false); const [savingCaso, setSavingCaso] = useState(false); const [casoForm, setCasoForm] = useState(patient.caso || {}); const [editForm, setEditForm] = useState({ nombre: patient.nombre || "", apellido: patient.apellido || "", edad: patient.edad || "", sexo: patient.sexo || "", telefono: patient.telefono || "", email: patient.email || "", condicion_principal: patient.condicion_principal || "", deporte: patient.deporte || "", nivel_actividad: patient.nivel_actividad || "Moderado", pais: patient.pais || "" });
   const patSess = sessions.filter(s => s.paciente_id === patient.id).sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
@@ -1675,6 +1688,28 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
     }
     setAccesoUrl(`${window.location.origin}/?p=${token}`);
     setShowAcceso(true);
+  }
+  async function abrirReportes() {
+    setShowReportes(true);
+    const { data } = await CoreServices.query("reportes", { paciente_id: patient.id });
+    setReportesPac((data || []).sort((a, b) => new Date(b.fecha || b.created_at || 0) - new Date(a.fecha || a.created_at || 0)));
+  }
+  async function subirReporte(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.type !== "application/pdf") { alert("Por ahora solo se pueden subir archivos PDF."); return; }
+    setSubiendoRep(true);
+    const path = `${patient.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const up = await CoreServices.subirArchivo("reportes", path, file);
+    if (!up.ok) { setSubiendoRep(false); alert("No se pudo subir el archivo: " + up.error); return; }
+    const url = await CoreServices.firmarUrl("reportes", path);
+    const hoy = new Date().toISOString().slice(0, 10);
+    const { data, error } = await CoreServices.insert("reportes", { paciente_id: patient.id, tipo: "pdf", titulo: file.name.replace(/\.pdf$/i, ""), storage_path: path, download_url: url, fecha: hoy, visible_paciente: true });
+    setSubiendoRep(false);
+    if (error) { alert("Se subió el archivo pero no se guardó el reporte: " + (error.message || "error")); return; }
+    const nuevo = (data && data[0]) || { id: Date.now().toString(), titulo: file.name.replace(/\.pdf$/i, ""), fecha: hoy, download_url: url };
+    setReportesPac(prev => [nuevo, ...prev]);
   }
 
   const patientPlugins = plugins.filter(p => p.patientAction);
@@ -1699,7 +1734,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
               {plugin.icon} {plugin.patientActionLabel || plugin.name}
             </button>
           ))}
-          <button onClick={async () => { const datos = { paciente: { nombre: patient.nombre, apellido: patient.apellido, edad: patient.edad, sexo: patient.sexo, condicion: patient.condicion_principal, deporte: patient.deporte, email: patient.email }, exportado: new Date().toISOString(), sesiones: patSess.map(s => ({ protocolo: s.protocolo, fecha: s.fecha, numero_sesion: s.numero_sesion, eva_pre: s.eva_pre, eva_post: s.eva_post, notas: s.notas, foto: s.foto || "" })) }; const texto = JSON.stringify(datos, null, 2); const nombreArchivo = "paciente_" + (patient.apellido || "") + "_" + (patient.nombre || "paciente") + ".json"; try { if (window.showSaveFilePicker) { const h = await window.showSaveFilePicker({ suggestedName: nombreArchivo }); const w = await h.createWritable(); await w.write(texto); await w.close(); alert("Listo: guardado en la carpeta que elegiste"); } else { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" })); a.download = nombreArchivo; a.click(); } } catch (e) { if (e.name !== "AbortError") alert("No se guardo: " + (e.message || e)); } }} style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.4)", color: "#38BDF8", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>📥 Descargar para Adri</button><Btn onClick={abrirEdicion} color={C.warning}>✏️ Editar ficha</Btn><Btn onClick={abrirCaso} color={C.danger}>🚗 Caso / Accidente</Btn><Btn onClick={abrirAcceso} color={C.teal}>{generando ? "Generando..." : "🔗 Dar acceso al portal"}</Btn><Btn onClick={() => setShowModal(true)} color={C.primary}>+ Sesión</Btn>
+          <button onClick={async () => { const datos = { paciente: { nombre: patient.nombre, apellido: patient.apellido, edad: patient.edad, sexo: patient.sexo, condicion: patient.condicion_principal, deporte: patient.deporte, email: patient.email }, exportado: new Date().toISOString(), sesiones: patSess.map(s => ({ protocolo: s.protocolo, fecha: s.fecha, numero_sesion: s.numero_sesion, eva_pre: s.eva_pre, eva_post: s.eva_post, notas: s.notas, foto: s.foto || "" })) }; const texto = JSON.stringify(datos, null, 2); const nombreArchivo = "paciente_" + (patient.apellido || "") + "_" + (patient.nombre || "paciente") + ".json"; try { if (window.showSaveFilePicker) { const h = await window.showSaveFilePicker({ suggestedName: nombreArchivo }); const w = await h.createWritable(); await w.write(texto); await w.close(); alert("Listo: guardado en la carpeta que elegiste"); } else { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" })); a.download = nombreArchivo; a.click(); } } catch (e) { if (e.name !== "AbortError") alert("No se guardo: " + (e.message || e)); } }} style={{ background: "rgba(56,189,248,0.15)", border: "1px solid rgba(56,189,248,0.4)", color: "#38BDF8", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>📥 Descargar para Adri</button><Btn onClick={abrirEdicion} color={C.warning}>✏️ Editar ficha</Btn><Btn onClick={abrirCaso} color={C.danger}>🚗 Caso / Accidente</Btn><Btn onClick={abrirAcceso} color={C.teal}>{generando ? "Generando..." : "🔗 Dar acceso al portal"}</Btn><Btn onClick={abrirReportes} color={C.purple}>📄 Reportes</Btn><Btn onClick={() => setShowModal(true)} color={C.primary}>+ Sesión</Btn>
         </div>
       </Card>
 
@@ -1717,6 +1752,34 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
             <Btn color={C.success} style={{ flex: 1 }} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent("Hola " + (patient.nombre || "") + ", este es tu acceso a tu portal de Awake4Wellness: " + accesoUrl)}`, "_blank")}>📱 WhatsApp</Btn>
             <Btn color={C.warning} style={{ flex: 1 }} onClick={() => window.open(`mailto:${patient.email || ""}?subject=${encodeURIComponent("Tu portal Awake4Wellness")}&body=${encodeURIComponent("Hola " + (patient.nombre || "") + ", este es tu acceso a tu portal del paciente: " + accesoUrl)}`)}>✉️ Correo</Btn>
           </div>
+        </div>
+      </Modal>
+
+      <Modal open={showReportes} onClose={() => setShowReportes(false)} title={`Reportes de ${patient.nombre || "paciente"}`} width={520}>
+        <div style={{ padding: "2px 2px 6px" }}>
+          <label style={{ display: "block", marginBottom: 16 }}>
+            <input type="file" accept="application/pdf" onChange={subirReporte} style={{ display: "none" }} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, background: dim(C.teal), border: `1px solid ${C.teal}40`, color: C.teal, borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>{subiendoRep ? "⏳ Subiendo..." : "📎 Subir un PDF"}</span>
+          </label>
+          {reportesPac.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.muted, padding: "8px 0", lineHeight: 1.6 }}>Aún no hay reportes. Subí el primero con el botón de arriba.</div>
+          ) : reportesPac.map((r, i) => (
+            <div key={r.id || i} style={{ padding: "12px 0", borderBottom: i < reportesPac.length - 1 ? `1px solid ${C.border}` : "none" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div><div style={{ fontSize: 13, fontWeight: 700 }}>📄 {r.titulo || "Reporte"}</div><div style={{ fontSize: 11, color: C.muted }}>{r.fecha ? new Date(r.fecha).toLocaleDateString("es-ES") : ""}</div></div>
+                {r.download_url && <button onClick={() => window.open(r.download_url, "_blank")} style={{ background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Abrir</button>}
+              </div>
+              {r.download_url ? (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Btn color={C.primary} style={{ flex: 1, padding: "6px", fontSize: 11 }} onClick={() => { try { navigator.clipboard.writeText(r.download_url); alert("Link del reporte copiado"); } catch { alert("Copia el link manualmente"); } }}>📋 Copiar link</Btn>
+                  <Btn color={C.success} style={{ flex: 1, padding: "6px", fontSize: 11 }} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent("Hola " + (patient.nombre || "") + ", acá está tu reporte: " + r.download_url)}`, "_blank")}>📱 WhatsApp</Btn>
+                  <Btn color={C.warning} style={{ flex: 1, padding: "6px", fontSize: 11 }} onClick={() => window.open(`mailto:${patient.email || ""}?subject=${encodeURIComponent("Tu reporte - Awake4Wellness")}&body=${encodeURIComponent("Hola " + (patient.nombre || "") + ", acá está tu reporte: " + r.download_url)}`)}>✉️ Correo</Btn>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: C.muted }}>Reporte de ejemplo (sin archivo). Subí un PDF para poder compartirlo y que el paciente lo descargue.</div>
+              )}
+            </div>
+          ))}
         </div>
       </Modal>
 
@@ -4677,7 +4740,7 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos }) 
             {reportes.length ? reportes.map((r, i) => (
               <div key={r.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < reportes.length - 1 ? `1px solid ${C.border}` : "none" }}>
                 <div><div style={{ fontSize: 13, fontWeight: 700 }}>{r.titulo || "Reporte"}</div><div style={{ fontSize: 11, color: C.muted }}>{fmtFecha(r.fecha)}</div></div>
-                <button onClick={() => alert("Pronto vas a poder descargar tus reportes en PDF desde aquí.")} title="Descargar" style={{ background: "none", border: "none", color: C.primary, cursor: "pointer", fontSize: 18 }}>⬇️</button>
+                <button onClick={() => r.download_url ? window.open(r.download_url, "_blank") : alert("Este reporte todavía no tiene archivo para descargar.")} title="Descargar" style={{ background: "none", border: "none", color: C.primary, cursor: "pointer", fontSize: 18 }}>⬇️</button>
               </div>
             )) : (
               <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>Aún no tienes reportes disponibles.</div>
