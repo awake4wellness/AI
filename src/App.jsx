@@ -332,6 +332,16 @@ export const CoreServices = {
     const d = await r.json().catch(() => ({}));
     return d.signedURL ? (SUPABASE_URL + "/storage/v1" + d.signedURL) : null;
   },
+  async borrarArchivo(bucket, path) {
+    const token = await this.getValidToken();
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`, { method: "DELETE", headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}` } });
+    return { ok: r.ok };
+  },
+  async del(table, id) {
+    const token = await this.getValidToken();
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}` } });
+    return { ok: r.ok };
+  },
   getUser() { try { return JSON.parse(localStorage.getItem("a4w_user")); } catch { return null; } },
   getToken() { return localStorage.getItem("a4w_token"); }, async getValidToken() { const exp = Number(localStorage.getItem("a4w_expires") || 0); const tok = localStorage.getItem("a4w_token"); if (tok && Date.now() < exp - 60000) return tok; const rt = localStorage.getItem("a4w_refresh"); if (!rt) return tok; if (!this._refreshPromise) { this._refreshPromise = fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY }, body: JSON.stringify({ refresh_token: rt }) }).then(r => r.json()).then(d => { if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_refresh", d.refresh_token || rt); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); } this._refreshPromise = null; return d.access_token || tok; }).catch(() => { this._refreshPromise = null; return tok; }); } return this._refreshPromise; },
 
@@ -1711,6 +1721,12 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
     const nuevo = (data && data[0]) || { id: Date.now().toString(), titulo: file.name.replace(/\.pdf$/i, ""), fecha: hoy, download_url: url };
     setReportesPac(prev => [nuevo, ...prev]);
   }
+  async function eliminarReporte(r) {
+    if (!window.confirm(`¿Eliminar el reporte "${r.titulo || ""}"? Esto no se puede deshacer.`)) return;
+    setReportesPac(prev => prev.filter(x => x.id !== r.id));
+    if (r.storage_path) await CoreServices.borrarArchivo("reportes", r.storage_path);
+    if (r.id) await CoreServices.del("reportes", r.id);
+  }
 
   const patientPlugins = plugins.filter(p => p.patientAction);
 
@@ -1767,7 +1783,10 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
             <div key={r.id || i} style={{ padding: "12px 0", borderBottom: i < reportesPac.length - 1 ? `1px solid ${C.border}` : "none" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <div><div style={{ fontSize: 13, fontWeight: 700 }}>📄 {r.titulo || "Reporte"}</div><div style={{ fontSize: 11, color: C.muted }}>{r.fecha ? new Date(r.fecha).toLocaleDateString("es-ES") : ""}</div></div>
-                {r.download_url && <button onClick={() => window.open(r.download_url, "_blank")} style={{ background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Abrir</button>}
+                <div style={{ display: "flex", gap: 6 }}>
+                  {r.download_url && <button onClick={() => window.open(r.download_url, "_blank")} style={{ background: "none", border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Abrir</button>}
+                  <button onClick={() => eliminarReporte(r)} title="Eliminar reporte" style={{ background: "none", border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>🗑️ Eliminar</button>
+                </div>
               </div>
               {r.download_url ? (
                 <div style={{ display: "flex", gap: 6 }}>
