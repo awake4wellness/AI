@@ -20,6 +20,7 @@ import { useState, useEffect, useRef, createContext, useContext, Component } fro
 // --- Una sola "pizarra" en memoria para toda la app ---
 const _hcStore = {};          // { [patientId]: hc }
 const _hcSubs = new Set();    // avisa a los componentes cuando algo cambia
+const _hcLoaded = new Set();  // pacientes ya hidratados desde la base (evita recargas)
 function _hcEmit() { _hcSubs.forEach((fn) => fn()); }
 
 // Estado inicial vacío de una HC. Ajusta/añade campos según tu HistoriaClinicaV3.
@@ -139,6 +140,25 @@ function useClinicalRecord(patient) {
     _hcSubs.add(fn);
     return () => _hcSubs.delete(fn);
   }, []);
+  // Hidratación: al abrir un paciente, carga su historia guardada (clinical_records)
+  // al store compartido para que el RESUMEN LIVE / Copiloto la muestren. La base guarda
+  // PLANO (eva, psqi, dhi); aquí se mapea a la forma anidada que usa el Motor Central.
+  useEffect(() => {
+    if (!patient || !patient.id || _hcLoaded.has(patientId)) return;
+    _hcLoaded.add(patientId);
+    CoreServices.query("clinical_records", { paciente_id: patient.id }).then(({ data }) => {
+      const d = data && data[0] && data[0].datos;
+      if (!d) return;
+      const mapped = {
+        ...d,
+        sueno: d.sueno || { psqi: Number(d.psqi) || 0, isi: Number(d.isi) || 0, epworth: Number(d.epworth) || 0 },
+        vertigo: d.vertigo || { dhi: Number(d.dhi) || 0, dix_hallpike: d.dix_hallpike || "negativo", red_flags: !!d.red_flags },
+        nutricion: d.nutricion || { deficiencias: d.nutricion_def || [] },
+      };
+      _hcStore[patientId] = { ...createEmptyHc(patient), ...mapped, ...(_hcStore[patientId] || {}) };
+      _hcEmit();
+    }).catch(() => {});
+  }, [patientId]);
   const hc = _hcStore[patientId] || createEmptyHc(patient);
   return {
     hc,
