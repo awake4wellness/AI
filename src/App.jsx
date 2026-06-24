@@ -330,7 +330,7 @@ export const CoreServices = {
     const token = await this.getValidToken();
     const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token || SUPABASE_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn }) });
     const d = await r.json().catch(() => ({}));
-    return d.signedURL ? (SUPABASE_URL + d.signedURL) : null;
+    return d.signedURL ? (SUPABASE_URL + "/storage/v1" + d.signedURL) : null;
   },
   getUser() { try { return JSON.parse(localStorage.getItem("a4w_user")); } catch { return null; } },
   getToken() { return localStorage.getItem("a4w_token"); }, async getValidToken() { const exp = Number(localStorage.getItem("a4w_expires") || 0); const tok = localStorage.getItem("a4w_token"); if (tok && Date.now() < exp - 60000) return tok; const rt = localStorage.getItem("a4w_refresh"); if (!rt) return tok; if (!this._refreshPromise) { this._refreshPromise = fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY }, body: JSON.stringify({ refresh_token: rt }) }).then(r => r.json()).then(d => { if (d.access_token) { localStorage.setItem("a4w_token", d.access_token); localStorage.setItem("a4w_refresh", d.refresh_token || rt); localStorage.setItem("a4w_expires", String(Date.now() + ((d.expires_in || 3600) * 1000))); } this._refreshPromise = null; return d.access_token || tok; }).catch(() => { this._refreshPromise = null; return tok; }); } return this._refreshPromise; },
