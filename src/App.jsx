@@ -1849,17 +1849,24 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
             <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>No hay citas. Agendá la primera con el formulario de arriba.</div>
           ) : citasPac.map((c, i) => {
             const est = { solicitada: C.warning, confirmada: C.success, reprogramada: C.primary, cumplida: C.muted, cancelada: C.danger }[c.estado] || C.muted;
+            const estLabel = { solicitada: "Pendiente", confirmada: "Confirmada", reprogramada: "Reprogramada", cumplida: "Cumplida", cancelada: "Cancelada" }[c.estado] || c.estado;
+            const notaReal = c.notas && !/^Solicitada por el paciente$/i.test(c.notas) ? c.notas : null;
             return (
-              <div key={c.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: i < citasPac.length - 1 ? `1px solid ${C.border}` : "none", opacity: c.estado === "cancelada" ? 0.5 : 1 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{c.fecha ? new Date(c.fecha).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>{c.protocolo || c.tipo || "Cita"} · {c.origen === "portal" ? "pedida por el paciente" : "agendada por ti"}</div>
+              <div key={c.id || i} style={{ padding: "11px 0", borderBottom: i < citasPac.length - 1 ? `1px solid ${C.border}` : "none", opacity: c.estado === "cancelada" ? 0.55 : 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{c.fecha ? new Date(c.fecha).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{c.protocolo || c.tipo || "Cita"} · {c.origen === "portal" ? "pedida por el paciente" : "agendada por ti"}</div>
+                  </div>
+                  <Badge color={est}>{estLabel}</Badge>
                 </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <Badge color={est}>{c.estado}</Badge>
-                  {c.estado === "solicitada" && <button onClick={() => cambiarEstadoCita(c, "confirmada")} style={{ background: "none", border: `1px solid ${C.success}40`, color: C.success, borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓ Confirmar</button>}
-                  {c.estado !== "cancelada" && <button onClick={() => cambiarEstadoCita(c, "cancelada")} title="Cancelar cita" style={{ background: "none", border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✕</button>}
-                </div>
+                {notaReal && <div style={{ fontSize: 12, color: C.text, marginTop: 7, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px" }}>💬 {notaReal}</div>}
+                {c.estado !== "cancelada" && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
+                    {c.estado !== "cumplida" && <button onClick={() => cambiarEstadoCita(c, "confirmada")} style={{ background: c.estado === "confirmada" ? "none" : dim(C.success), border: `1px solid ${C.success}55`, color: C.success, borderRadius: 8, padding: "6px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{c.estado === "confirmada" ? "↻ Reconfirmar" : "✓ Confirmar"}</button>}
+                    <button onClick={() => cambiarEstadoCita(c, "cancelada")} style={{ background: "none", border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 8, padding: "6px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕ Cancelar</button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -5185,9 +5192,9 @@ export default function App() {
                   <div style={{ position: "absolute", right: 0, top: 42, width: 330, maxHeight: 400, overflowY: "auto", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 8, zIndex: 60, boxShadow: "0 10px 34px rgba(0,0,0,0.45)" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, letterSpacing: 1, padding: "6px 8px 8px" }}>🔔 AVISOS DE PACIENTES</div>
                     {notis.length === 0 ? <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>No hay avisos todavía. Cuando un paciente confirme o pida una cita, aparece acá.</div> : notis.map(n => (
-                      <div key={n.id} style={{ padding: "9px 8px", borderTop: `1px solid ${C.border}` }}>
+                      <div key={n.id} onClick={() => { const p = patients.find(x => String(x.id) === String(n.paciente_id)); setShowNotis(false); if (p) navigate("patient-detail", p); }} title="Abrir la ficha del paciente" style={{ padding: "9px 8px", borderTop: `1px solid ${C.border}`, cursor: "pointer", borderRadius: 8 }} onMouseEnter={e => e.currentTarget.style.background = C.bg} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                         <div style={{ fontSize: 12.5, color: C.text, lineHeight: 1.45 }}>{n.tipo === "cita_solicitada" ? "📅 " : "✓ "}{n.mensaje}</div>
-                        <div style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{n.created_at ? new Date(n.created_at).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                        <div style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{n.created_at ? new Date(n.created_at).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""} · tocá para abrir la ficha</div>
                       </div>
                     ))}
                   </div>
