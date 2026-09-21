@@ -473,27 +473,32 @@ function DashboardPlugin({ patients, sessions, navigate }) {
         <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>Dashboard Clínico</h2>
         <p style={{ margin: "5px 0 0", color: C.muted, fontSize: 13 }}>{new Date().toLocaleDateString("es-ES", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 28 }}>
+      <div className="stats-grid" style={{ display: "grid", gap: 14, marginBottom: 28 }}>
         <StatCard label="Pacientes Activos" value={patients.length} color={C.primary} icon="👥" sub="en seguimiento" />
         <StatCard label="Sesiones Totales" value={sessions.length} color={C.success} icon="📅" sub="registradas" />
         <StatCard label="Mejoría Promedio" value={`${mejoria}%`} color={C.purple} icon="📈" sub="reducción dolor" />
-        <StatCard label="Módulos Activos" value={pluginRegistry.length} color={C.warning} icon="🔌" sub="conectados" />
+        <StatCard label="Actividad reciente" value={sessions.filter(s => Date.now() - new Date(s.fecha || 0).getTime() < 7 * 86400000).length} color={C.warning} icon="◎" sub="últimos 7 días" />
       </div>
       <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>ACCESO RÁPIDO — MÓDULOS</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
-          {pluginRegistry.filter(p => p.id !== "dashboard" && p.id !== "patients").map(plugin => (
-            <Card key={plugin.id} color={plugin.color} onClick={() => navigate(plugin.id)} style={{ padding: "16px 18px" }}>
-              <div style={{ fontSize: 26, marginBottom: 10 }}>{plugin.icon}</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{plugin.name}</div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{plugin.description}</div>
-              {plugin.badge && <div style={{ marginTop: 8 }}><Badge color={plugin.color}>{plugin.badge}</Badge></div>}
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>ACCIONES PRINCIPALES</div>
+        <div className="quick-grid" style={{ display: "grid", gap: 12 }}>
+          {[
+            { id: "patients", name: "Abrir pacientes", icon: "👥", description: "Historias, sesiones y seguimiento", color: C.teal },
+            { id: "flir", name: "Nueva evaluación", icon: "🌡️", description: "Termografía y captura clínica", color: C.thermo },
+            { id: "prescriptions", name: "Plan terapéutico", icon: "✦", description: "Protocolos para revisión clínica", color: C.primary },
+            { id: "copilot", name: "Consultar a ALEX", icon: "🧠", description: "Apoyo para el análisis clínico", color: C.success },
+          ].map(item => (
+            <Card key={item.id} color={item.color} onClick={() => navigate(item.id)} style={{ padding: "18px" }}>
+              <div style={{ fontSize: 24, marginBottom: 10 }}>{item.icon}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{item.name}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>{item.description}</div>
             </Card>
           ))}
         </div>
       </div>
       <Card>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 16 }}>ACTIVIDAD RECIENTE</div>
+        {sessions.length === 0 && <div style={{ fontSize: 13, color: C.muted, padding: "8px 0" }}>Aún no hay sesiones registradas.</div>}
         {sessions.slice(0, 5).map(ses => {
           const pac = patients.find(p => p.id === ses.paciente_id);
           const mej = ses.eva_pre && ses.eva_post ? Math.round((ses.eva_pre - ses.eva_post) / ses.eva_pre * 100) : null;
@@ -1739,7 +1744,7 @@ function PatientDetailPlugin({ patient, sessions, onAddSession, navigate, plugin
     setCitasPac((data || []).sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)));
   }
   async function crearCita() {
-    if (!citaForm.fecha) { alert("Elegí la fecha y la hora de la cita."); return; }
+    if (!citaForm.fecha) { alert("Elige la fecha y la hora de la cita."); return; }
     setGuardandoCita(true);
     const { data, error } = await CoreServices.insert("citas", { paciente_id: patient.id, fecha: new Date(citaForm.fecha).toISOString(), tipo: "sesion", protocolo: citaForm.protocolo || null, estado: "confirmada", origen: "interno" });
     setGuardandoCita(false);
@@ -3629,7 +3634,7 @@ function PaymentsPlugin() {
 
   return (
     <div>
-      <div style={{marginBottom:24}}><h2 style={{margin:0,fontSize:22,fontWeight:800,color:C.text}}>💳 Planes y Membresías</h2><p style={{margin:"5px 0 0",color:C.muted,fontSize:13}}>Stripe integrado · Facturación automática</p></div>
+      <div style={{marginBottom:24}}><h2 style={{margin:0,fontSize:22,fontWeight:800,color:C.text}}>💳 Planes y Membresías</h2><p style={{margin:"5px 0 0",color:C.muted,fontSize:13}}>Configuración comercial y facturación</p></div>
       <div style={{display:"flex",gap:4,marginBottom:24,borderBottom:`1px solid ${C.border}`}}>
         {[{id:"plans",l:"📋 Planes"},{id:"billing",l:"💳 Facturación"},{id:"revenue",l:"📊 Ingresos"}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 16px",border:"none",cursor:"pointer",background:"transparent",fontSize:13,fontWeight:700,color:tab===t.id?C.success:C.muted,borderBottom:tab===t.id?`2px solid ${C.success}`:"2px solid transparent"}}>{t.l}</button>
@@ -3651,9 +3656,9 @@ function PaymentsPlugin() {
               </div>
             ))}
           </div>
-          <Card style={{background:"rgba(16,185,129,0.04)"}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.success,marginBottom:6}}>✓ STRIPE CONFIGURADO</div>
-            <p style={{margin:0,fontSize:13,color:C.muted}}>Reemplaza <code style={{background:"rgba(255,255,255,0.08)",padding:"1px 6px",borderRadius:4,fontSize:11,color:C.success}}>TU_STRIPE_PUBLIC_KEY_AQUI</code> con tu clave pública de Stripe para activar pagos reales.</p>
+          <Card style={{background:"rgba(245,158,11,0.04)"}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.warning,marginBottom:6}}>PAGOS EN CONFIGURACIÓN</div>
+            <p style={{margin:0,fontSize:13,color:C.muted}}>Los cobros reales todavía no están activos. Conecta y verifica Stripe antes de ofrecer estos planes a clientes.</p>
           </Card>
         </div>
       )}
@@ -3891,10 +3896,10 @@ Devuelve este JSON:
   if (step === "sent") return (
     <div style={{ textAlign: "center", padding: "60px 20px" }}>
       <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
-      <div style={{ fontSize: 22, fontWeight: 900, color: C.success, marginBottom: 8 }}>¡Prescripción enviada!</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: C.success, marginBottom: 8 }}>¡Plan enviado para seguimiento!</div>
       <div style={{ fontSize: 14, color: C.muted, marginBottom: 28 }}>El protocolo <strong style={{ color: C.text }}>{selected?.nombre}</strong> ha sido prescrito a {patient?.nombre}.</div>
       <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-        <button onClick={() => { setStep("list"); setSelected(null); setCustomConfig({}); }} style={{ padding: "11px 24px", borderRadius: 11, background: C.primaryDim, border: `1px solid ${C.primary}35`, color: C.primary, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Nueva prescripción</button>
+        <button onClick={() => { setStep("list"); setSelected(null); setCustomConfig({}); }} style={{ padding: "11px 24px", borderRadius: 11, background: C.primaryDim, border: `1px solid ${C.primary}35`, color: C.primary, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>← Nuevo plan</button>
       </div>
     </div>
   );
@@ -3955,7 +3960,7 @@ Devuelve este JSON:
         <div><label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5 }}>Observaciones adicionales</label><textarea value={customConfig.observaciones || ""} onChange={e => setCustomConfig(p => ({ ...p, observaciones: e.target.value }))} placeholder="Indicaciones especiales para este paciente..." rows={3} style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 9, color: C.text, fontSize: 13, padding: "9px 12px", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} /></div>
       </div>
       <button onClick={generarConIA} disabled={generating} style={{ width: "100%", padding: "14px", borderRadius: 12, background: generating ? "rgba(255,255,255,0.03)" : `${selected?.color}15`, border: `1px solid ${selected?.color}35`, color: selected?.color, fontSize: 14, fontWeight: 800, cursor: generating ? "not-allowed" : "pointer" }}>
-        {generating ? "🧠 Generando prescripción con IA..." : "✨ Generar prescripción personalizada con IA →"}
+        {generating ? "🧠 Preparando el plan con IA..." : "✨ Preparar un plan personalizado con IA →"}
       </button>
     </div>
   );
@@ -3964,8 +3969,8 @@ Devuelve este JSON:
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>💊 Prescripción Digital</h2>
-          <p style={{ margin: "5px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `Para: ${patient.nombre} ${patient.apellido}` : "Selecciona el protocolo a prescribir"}</p>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>✦ Plan terapéutico</h2>
+          <p style={{ margin: "5px 0 0", color: C.muted, fontSize: 13 }}>{patient ? `Para: ${patient.nombre} ${patient.apellido}` : "Selecciona un protocolo para revisar"}</p>
         </div>
         {prescripciones.length > 0 && <div style={{ background: C.primaryDim, border: `1px solid ${C.primary}30`, borderRadius: 20, padding: "5px 14px", fontSize: 12, fontWeight: 700, color: C.primary }}>{prescripciones.length} enviadas</div>}
       </div>
@@ -4649,31 +4654,36 @@ function ReportePlugin({ patient }) { const { C } = useApp(); const [pdfUrl, set
   { id: "flir", name: "Termografía FLIR", icon: "🌡️", color: DS.colors.thermo, group: "devices", badge: "SDK", description: "Cámara térmica y galería", component: FLIRPlugin, patientAction: true, patientActionLabel: "Termografía", onPatientAction: (p, nav) => nav("flir", p) },
   { id: "copilot", name: "ALEX", icon: "🧠", color: DS.colors.success, group: "ai", badge: "IA", description: "Asistente clínico Alex", component: CopilotoConImagenes, patientAction: true, patientActionLabel: "Copiloto", onPatientAction: (p, nav) => nav("copilot", p) },
   { id: "biorresonancia", name: "Nutrición", icon: "🧬", color: DS.colors.teal, group: "devices", description: "Reportes y orientación de bienestar", component: NutriciónPlugin, patientAction: true, patientActionLabel: "Nutrición", onPatientAction: (p, nav) => nav("biorresonancia", p) }, { id: "devices", name: "Dispositivos", icon: "🔌", color: DS.colors.primary, group: "devices", description: "Hub de integraciones", component: DevicesPlugin },
-  { id: "inbody", name: "InBody", icon: "⚖️", color: DS.colors.primary, group: "devices", description: "Composición corporal", component: () => <PlaceholderPlugin name="InBody" icon="⚖️" description="Integración de composición corporal (LookinBody WebAPI + CSV)." coming />, patientAction: true, patientActionLabel: "InBody", onPatientAction: (p, nav) => nav("inbody", p) },
-  { id: "vald", name: "VALD", icon: "💪", color: DS.colors.warning, group: "devices", description: "Fuerza y rendimiento", component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración de fuerza y rendimiento vía REST API (OAuth2)." coming />, patientAction: true, patientActionLabel: "VALD", onPatientAction: (p, nav) => nav("vald", p) },
-  { id: "bodygee", name: "Bodygee", icon: "🔵", color: DS.colors.purple, group: "devices", description: "Escaneo 3D corporal", component: () => <PlaceholderPlugin name="Bodygee" icon="🔵" description="Escaneo 3D corporal vía REST API + Webhooks." coming /> },
+  { id: "inbody", name: "InBody", icon: "⚖️", color: DS.colors.primary, group: "devices", status: "Próximamente", description: "Composición corporal", component: () => <PlaceholderPlugin name="InBody" icon="⚖️" description="Integración de composición corporal (LookinBody WebAPI + CSV)." coming />, patientAction: true, patientActionLabel: "InBody", onPatientAction: (p, nav) => nav("inbody", p) },
+  { id: "vald", name: "VALD", icon: "💪", color: DS.colors.warning, group: "devices", status: "Próximamente", description: "Fuerza y rendimiento", component: () => <PlaceholderPlugin name="VALD Performance" icon="💪" description="Integración de fuerza y rendimiento vía REST API (OAuth2)." coming />, patientAction: true, patientActionLabel: "VALD", onPatientAction: (p, nav) => nav("vald", p) },
+  { id: "bodygee", name: "Bodygee", icon: "🔵", color: DS.colors.purple, group: "devices", status: "Próximamente", description: "Escaneo 3D corporal", component: () => <PlaceholderPlugin name="Bodygee" icon="🔵" description="Escaneo 3D corporal vía REST API + Webhooks." coming /> },
   { id: "garmin", name: "Wearables", icon: "⌚", color: DS.colors.success, group: "devices", description: "Garmin / Polar / Fitbit", component: WearablesPlugin },
   
   { id: "analytics", name: "Analytics", icon: "📈", color: DS.colors.purple, group: "business", description: "Métricas y reportes", component: AnalyticsPlugin },
   { id: "telemedicine", name: "Telemedicina", icon: "📱", color: DS.colors.teal, group: "clinical", description: "Video, chat y archivos", component: TelemedicinePlugin, patientAction: true, patientActionLabel: "Telemedicina", onPatientAction: (p, nav) => nav("telemedicine", p) },
   { id: "payments", name: "Planes y Pagos", icon: "💳", color: DS.colors.success, group: "business", description: "Membresías y facturación", component: PaymentsPlugin },
-  { id: "prescriptions", name: "Prescripciones", icon: "💊", color: DS.colors.teal, group: "clinical", description: "Protocolos digitales", component: PrescriptionsPlugin, patientAction: true, patientActionLabel: "Prescribir", onPatientAction: (p, nav) => nav("prescriptions", p) },
+  { id: "prescriptions", name: "Planes terapéuticos", icon: "✦", color: DS.colors.teal, group: "clinical", description: "Protocolos para revisión clínica", component: PrescriptionsPlugin, patientAction: true, patientActionLabel: "Crear plan", onPatientAction: (p, nav) => nav("prescriptions", p) },
   { id: "knowledge", name: "Base de Conocimiento", icon: "📚", color: DS.colors.warning, group: "education", badge: "Admin", description: "Biblioteca clínica IA", component: KnowledgeBasePlugin },
-  { id: "education", name: "Educación", icon: "🎓", color: DS.colors.purple, group: "education", description: "Cursos y formación", component: () => <PlaceholderPlugin name="Educación" icon="🎓" description="Módulo de cursos y formación clínica." coming /> },
+  { id: "education", name: "Educación", icon: "🎓", color: DS.colors.purple, group: "education", status: "Próximamente", description: "Cursos y formación", component: () => <PlaceholderPlugin name="Educación" icon="🎓" description="Módulo de cursos y formación clínica." coming /> },
+];
+
+const NAV_SECTIONS = [
+  { id: "dashboard", label: "Inicio", icon: "⌂", items: ["dashboard"] },
+  { id: "patients", label: "Pacientes", icon: "👥", items: ["patients"] },
+  { id: "assessment", label: "Evaluación", icon: "◎", items: ["reporte", "flir", "fuerza", "biorresonancia", "anillo", "garmin", "inbody", "vald", "bodygee"] },
+  { id: "care", label: "Tratamiento", icon: "✦", items: ["prescriptions", "telemedicine", "copilot"] },
+  { id: "more", label: "Gestión y más", icon: "•••", items: ["facturacion", "analytics", "payments", "adri", "devices", "knowledge", "education"] },
 ];
 // ═══════════════════════════════════════════════════════════════
 // PORTAL DEL PACIENTE (rol "paciente")
 // ═══════════════════════════════════════════════════════════════
-// Paciente de prueba del portal (María López) — se usa cuando no hay un paciente vinculado al login
-const PORTAL_DEMO_PATIENT_ID = "802279a0-2929-4727-9741-7402d2b8f54e";
-const PORTAL_DEMO_TOKEN = "389f920319664776b3871f501cf524a13d8fd44cc0e340c9835dce4ebed1247b";
-
 // Loader: portal del paciente logueado (rol "paciente") — datos por consulta normal
 function PatientPortal({ user, onSignOut }) {
   const C = DS.colors;
-  const pacienteId = (user && user.paciente_id) || PORTAL_DEMO_PATIENT_ID;
+  const pacienteId = user && user.paciente_id;
   const [d, setD] = useState(null);
   useEffect(() => {
+    if (!pacienteId) return undefined;
     let vivo = true;
     (async () => {
       const [p, ses, cit, rep, rec] = await Promise.all([
@@ -4694,6 +4704,7 @@ function PatientPortal({ user, onSignOut }) {
     })().catch(() => { if (vivo) setD({ yo: null, sesiones: [], citas: [], reportes: [], recos: [] }); });
     return () => { vivo = false; };
   }, [pacienteId]);
+  if (!pacienteId) return <PortalToken token="" onSignOut={onSignOut} />;
   if (!d) return <PortalCargando C={C} user={user} />;
   return <PortalVista user={user} onSignOut={onSignOut} {...d} />;
 }
@@ -4746,14 +4757,14 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
     setAccionMsg("Confirmando…");
     const ok = await CoreServices.rpc("portal_confirmar_cita", { p_token: token, p_cita_id: citaId });
     setCitaEstado(ok ? "confirmada" : null);
-    setAccionMsg(ok ? "✓ ¡Cita confirmada! Te esperamos." : "No se pudo confirmar, intentá de nuevo.");
+    setAccionMsg(ok ? "✓ ¡Cita confirmada! Te esperamos." : "No se pudo confirmar. Intenta de nuevo.");
   }
   async function pedirReagendar() {
-    if (!token || !nuevoDia || !nuevaHora) { setAccionMsg("Elegí el día y la hora."); return; }
+    if (!token || !nuevoDia || !nuevaHora) { setAccionMsg("Elige el día y la hora."); return; }
     setAccionMsg("Enviando pedido…");
     const ok = await CoreServices.rpc("portal_solicitar_cita", { p_token: token, p_fecha: new Date(`${nuevoDia}T${nuevaHora}`).toISOString(), p_nota: "El paciente eligió este horario desde el portal" });
     setReagendar(false); setNuevoDia(""); setNuevaHora("");
-    setAccionMsg(ok ? "✓ ¡Pedido enviado! Tu médico te lo va a confirmar." : "No se pudo enviar, intentá de nuevo.");
+    setAccionMsg(ok ? "✓ ¡Solicitud enviada! Tu médico la confirmará." : "No se pudo enviar. Intenta de nuevo.");
   }
 
   const num = v => (v == null || v === "" ? null : Number(v));
@@ -4773,7 +4784,7 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
 
   const ahora = Date.now();
   const citasOrden = [...citas].filter(c => c.estado !== "cancelada").sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
-  const proxima = citasOrden.find(c => new Date(c.fecha).getTime() >= ahora) || citasOrden[citasOrden.length - 1] || null;
+  const proxima = citasOrden.find(c => new Date(c.fecha).getTime() >= ahora) || null;
 
   const nombre = (yo && yo.nombre) || "";
   const apellido = (yo && yo.apellido) || "";
@@ -4820,9 +4831,9 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
             )}
             {reagendar && (
               <div style={{ marginTop: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>1. Elegí el día</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>1. Elige el día</div>
                 <input type="date" value={nuevoDia} onChange={e => setNuevoDia(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 13, marginBottom: 12 }} />
-                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>2. Elegí la hora</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>2. Elige la hora</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
                   {["08:00", "09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00", "18:00"].map(h => (
                     <button key={h} onClick={() => setNuevaHora(h)} style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${nuevaHora === h ? C.primary : C.border}`, background: nuevaHora === h ? dim(C.primary) : "transparent", color: nuevaHora === h ? C.primary : C.text, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{h}</button>
@@ -4903,7 +4914,7 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
           <Card style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 12 }}>📱 TELECONSULTA</div>
             {(clinica && (clinica.whatsapp || clinica.telefono)) ? (<>
-              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>¿Necesitás hablar con tu médico? Llamá directo:</div>
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>¿Necesitas hablar con tu médico? Comunícate directamente:</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {clinica.whatsapp && <Btn color={C.success} onClick={() => window.open(`https://wa.me/${(clinica.whatsapp || "").replace(/\D/g, "")}?text=${encodeURIComponent("Hola, soy " + (nombre || "") + ", quisiera una teleconsulta.")}`, "_blank")} style={{ flex: "1 1 150px", padding: "12px" }}>📱 WhatsApp</Btn>}
                 {clinica.telefono && <Btn color={C.primary} onClick={() => window.open(`tel:${(clinica.telefono || "").replace(/[^\d+]/g, "")}`)} style={{ flex: "1 1 150px", padding: "12px" }}>📞 Llamar</Btn>}
@@ -4921,60 +4932,22 @@ function PortalVista({ user, onSignOut, yo, sesiones, citas, reportes, recos, to
 // ═══════════════════════════════════════════════════════════════
 // LOGIN
 // ═══════════════════════════════════════════════════════════════
-const DEMO_CREDENTIALS = {
-  admin:    { email: "admin@awake4wellness.com",    pass: "Admin2024!",    label: "Administrador", icon: "👑", color: DS.colors.warning },
-  medico:   { email: "javiercuartasjaller@gmail.com", pass: "",   label: "Médico",        icon: "👨‍⚕️", color: DS.colors.primary },
-  paciente: { email: "paciente@awake4wellness.com", pass: "Paciente2024!", label: "Paciente",      icon: "🧑", color: DS.colors.teal },
-};
-
-function RoleSelector({ value, onChange }) {
-  const C = DS.colors;
-  return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-      {Object.entries(DEMO_CREDENTIALS).map(([rol, cfg]) => (
-        <button key={rol} onClick={() => onChange(rol)} style={{
-          flex: 1, padding: "12px 8px", borderRadius: 12, cursor: "pointer",
-          border: `1px solid ${value === rol ? `${cfg.color}50` : C.border}`,
-          background: value === rol ? dim(cfg.color) : "rgba(255,255,255,0.03)",
-          color: value === rol ? cfg.color : C.muted, fontWeight: 700, fontSize: 12,
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 6, transition: "all 0.15s",
-        }}>
-          <span style={{ fontSize: 22 }}>{cfg.icon}</span>{cfg.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function LoginScreen({ onLogin }) {
   const C = DS.colors;
-  const [rol, setRol] = useState("medico");
-  const [email, setEmail] = useState(DEMO_CREDENTIALS.medico.email);
-  const [pass, setPass] = useState(DEMO_CREDENTIALS.medico.pass);
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  function pickRole(r) {
-    setRol(r);
-    setEmail(DEMO_CREDENTIALS[r].email);
-    setPass(DEMO_CREDENTIALS[r].pass);
-  }
-
   async function entrar() {
+    if (!email.trim() || !pass) { setError("Escribe tu correo y contraseña."); return; }
     setLoading(true); setError("");
     try {
-      const demo = DEMO_CREDENTIALS[rol];
-      const esDemo = demo && demo.pass && email.trim().toLowerCase() === demo.email && pass === demo.pass;
-      if (esDemo) {
-        // Acceso demo precargado: no requiere cuenta en Supabase (los datos se leen con la clave pública)
-        const user = { email: demo.email, id: "demo", rol };
-        localStorage.setItem("a4w_user", JSON.stringify(user));
-        onLogin(user);
-        return;
-      }
       const d = await CoreServices.signIn(email, pass);
       if (!d || !d.access_token) { setError("Correo o contraseña incorrectos."); return; }
-      const user = { email, id: (d.user && d.user.id) || "user", rol };
+      const metadata = (d.user && { ...(d.user.user_metadata || {}), ...(d.user.app_metadata || {}) }) || {};
+      const rol = ["admin", "medico", "paciente"].includes(metadata.rol) ? metadata.rol : "medico";
+      const user = { ...d.user, email: d.user?.email || email.trim(), id: d.user?.id, rol, paciente_id: metadata.paciente_id, paciente_token: metadata.paciente_token };
       localStorage.setItem("a4w_user", JSON.stringify(user));
       onLogin(user);
     } catch (e) {
@@ -4988,12 +4961,11 @@ function LoginScreen({ onLogin }) {
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 12 }}>🌿</div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900 }}>Awake4Wellness</h1>
-          <p style={{ margin: "6px 0 0", color: C.muted, fontSize: 13 }}>Concierge Recovery & Neuro-Metabolic Optimization</p>
+          <p style={{ margin: "6px 0 0", color: C.muted, fontSize: 13 }}>Plataforma clínica de recuperación y bienestar</p>
         </div>
 
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1.5, marginBottom: 10 }}>SELECCIONA TU ROL</div>
-          <RoleSelector value={rol} onChange={pickRole} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.teal, letterSpacing: 1.5, marginBottom: 16 }}>ACCESO PROFESIONAL</div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Input label="Correo" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" />
@@ -5002,18 +4974,12 @@ function LoginScreen({ onLogin }) {
 
           {error && <div style={{ marginTop: 12, fontSize: 12, color: C.danger }}>{error}</div>}
 
-          {IS_DEMO && false && (
-            <div style={{ marginTop: 12, fontSize: 11, color: C.dim }}>
-              Conecta Supabase para autenticación real.
-            </div>
-          )}
-
           <Btn color={C.teal} fullWidth onClick={entrar} disabled={loading} style={{ marginTop: 18, padding: "13px" }}>
             {loading ? "Entrando..." : "Entrar →"}
           </Btn>
 
-          <div style={{ marginTop: 14, fontSize: 11, color: C.muted, textAlign: "center" }}>
-            Modo demo · credenciales precargadas por rol
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, textAlign: "center", lineHeight: 1.55 }}>
+            Los pacientes acceden únicamente desde el enlace seguro compartido por su profesional.
           </div>
         </div>
       </div>
@@ -5026,10 +4992,11 @@ function LoginScreen({ onLogin }) {
 // ═══════════════════════════════════════════════════════════════
 export default function App() {
   const C = DS.colors;
-  const [user, setUser] = useState(() => CoreServices.getUser());
-  const [active, setActive] = useState({ id: "dashboard", patient: null }); const [verBienvenida, setVerBienvenida] = useState(true);
-  const [patients, setPatients] = useState(DEMO_PATIENTS);
-  const [sessions, setSessions] = useState(DEMO_SESSIONS);
+  const [user, setUser] = useState(() => { const saved = CoreServices.getUser(); if (saved && saved.id === "demo") { CoreServices.signOut(); return null; } return saved; });
+  const [active, setActive] = useState({ id: "dashboard", patient: null });
+  const [patients, setPatients] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [notis, setNotis] = useState([]); const [showNotis, setShowNotis] = useState(false);
   const [showConfig, setShowConfig] = useState(false); const [configForm, setConfigForm] = useState({ whatsapp: "", telefono: "" }); const [guardandoConfig, setGuardandoConfig] = useState(false);
 
@@ -5074,17 +5041,9 @@ export default function App() {
     });
   }, []);
 
-  useEffect(() => {
-    CoreServices.query("patients").then(({ data }) => {
-      if (data && data.length) setPatients(data);
-    });
-    CoreServices.query("sessions").then(({ data }) => {
-      if (data && data.length) setSessions(data);
-    });
-  }, []);
-
   function navigate(id, patient = null) {
     setActive({ id, patient: patient || (id === "patient-detail" ? active.patient : null) });
+    setMenuOpen(false);
   }
 
   async function addPatient(form) {
@@ -5106,7 +5065,9 @@ export default function App() {
   if (portalToken) return <PortalToken token={portalToken} />;
 
   if (!user) return <LoginScreen onLogin={setUser} />;
-  if (user.rol === "paciente") return <PortalToken token={user.paciente_token || PORTAL_DEMO_TOKEN} onSignOut={signOut} />;
+  if (user.rol === "paciente") return user.paciente_token
+    ? <PortalToken token={user.paciente_token} onSignOut={signOut} />
+    : <PatientPortal user={user} onSignOut={signOut} />;
 
   const rol = user.rol || "medico";
   const visiblePlugins = pluginRegistry.filter(p => rol === "admin" ? true : p.badge !== "Admin");
@@ -5119,15 +5080,16 @@ export default function App() {
     ActiveComp = activePlugin.component;
   }
 
-  const compacto = active.id === "patient-detail", groups = Object.keys(PLUGIN_GROUPS);
   const noLeidos = notis.filter(n => !n.leido).length;
+  const activeSection = NAV_SECTIONS.find(section => section.items.includes(active.id)) || NAV_SECTIONS[0];
+  const roleLabel = rol === "admin" ? "Administrador" : "Profesional";
 
   return (
     <AppCtx.Provider value={{ C, user }}>
-      <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>{verBienvenida && <BienvenidaMini C={C} onCerrar={() => setVerBienvenida(false)} />}
+      <div className="app-shell" style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text }}>
         <Modal open={showConfig} onClose={() => setShowConfig(false)} title="Teleconsulta · Tus datos de contacto" width={460}>
           <div style={{ padding: "2px 2px 6px" }}>
-            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 16 }}>Estos números aparecen en el portal del paciente para que te llame por WhatsApp o teléfono. Poné el código de país (ej: +57 o +1).</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 16 }}>Estos números aparecen en el portal del paciente para que pueda comunicarse por WhatsApp o teléfono. Incluye el código de país (por ejemplo, +57 o +1).</div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>📱 WhatsApp</div>
               <input value={configForm.whatsapp} onChange={e => setConfigForm({ ...configForm, whatsapp: e.target.value })} placeholder="+57 300 123 4567" style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14 }} />
@@ -5139,48 +5101,62 @@ export default function App() {
             <Btn color={C.teal} fullWidth onClick={guardarConfig} disabled={guardandoConfig} style={{ padding: "11px" }}>{guardandoConfig ? "Guardando…" : "Guardar"}</Btn>
           </div>
         </Modal>
+        {menuOpen && <button className="sidebar-backdrop" aria-label="Cerrar navegación" onClick={() => setMenuOpen(false)} />}
         {/* Sidebar */}
-        <div style={{ width: compacto ? 72 : 240, borderRight: `1px solid ${C.border}`, padding: "18px 14px", display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh", boxSizing: "border-box", overflowY: "auto" }}>
+        <aside className={`app-sidebar ${menuOpen ? "is-open" : ""}`} style={{ borderRight: `1px solid ${C.border}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, padding: "0 6px" }}>
             <div style={{ width: 32, height: 32, borderRadius: 10, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>🌿</div>
-            {!compacto && <div><div style={{ fontSize: 14, fontWeight: 700 }}>Awake4Wellness</div><div style={{ fontSize: 9, color: C.muted }}>v4.0 · {DEMO_CREDENTIALS[rol]?.label || "Médico"}</div></div>}
+            <div><div style={{ fontSize: 14, fontWeight: 700 }}>Awake4Wellness</div><div style={{ fontSize: 9, color: C.muted }}>Espacio clínico · {roleLabel}</div></div>
           </div>
 
-          {groups.map(g => {
-            const plugs = visiblePlugins.filter(p => p.group === g);
-            if (!plugs.length) return null;
+          <nav aria-label="Navegación principal">
+          {NAV_SECTIONS.map(section => {
+            const items = section.items.map(id => visiblePlugins.find(p => p.id === id)).filter(Boolean);
+            const isSectionActive = section.id === activeSection.id || items.some(p => p.id === active.id);
             return (
-              <div key={g} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.dim, letterSpacing: 2, padding: "0 8px", marginBottom: 6 }}>{PLUGIN_GROUPS[g].icon} {PLUGIN_GROUPS[g].label.toUpperCase()}</div>
-                {plugs.map(p => {
+              <div key={section.id} style={{ marginBottom: 5 }}>
+                <button onClick={() => navigate(items[0]?.id || "dashboard")} style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 11px", borderRadius: 10, border: "none", cursor: "pointer", textAlign: "left",
+                  background: isSectionActive ? "rgba(45,212,191,0.09)" : "transparent", color: isSectionActive ? C.teal : C.muted, fontSize: 13, fontWeight: isSectionActive ? 800 : 600,
+                }}>
+                  <span style={{ width: 20, textAlign: "center", fontSize: 15 }}>{section.icon}</span>
+                  <span style={{ flex: 1 }}>{section.label}</span>
+                  {items.length > 1 && <span style={{ fontSize: 10, color: C.dim }}>{items.length}</span>}
+                </button>
+                {isSectionActive && items.length > 1 && <div style={{ margin: "4px 0 9px 20px", paddingLeft: 10, borderLeft: `1px solid ${C.border}` }}>
+                  {items.map(p => {
                   const on = active.id === p.id;
                   return (
                     <button key={p.id} onClick={() => navigate(p.id)} style={{
-                      width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 9, border: "none", cursor: "pointer", marginBottom: 2, textAlign: "left",
+                      width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8, border: "none", cursor: "pointer", marginBottom: 2, textAlign: "left",
                       background: on ? dim(p.color) : "transparent",
-                      color: on ? p.color : C.muted, fontSize: 12.5, fontWeight: on ? 700 : 500,
-                      borderLeft: on ? `2px solid ${p.color}` : "2px solid transparent",
+                      color: on ? p.color : C.muted, fontSize: 11.5, fontWeight: on ? 700 : 500,
                     }}>
-                      <span style={{ fontSize: 15 }}>{p.icon}</span>
+                      <span style={{ fontSize: 13 }}>{p.icon}</span>
                       <span style={{ flex: 1 }}>{p.name}</span>
-                      {p.badge && <span style={{ fontSize: 8, fontWeight: 800, padding: "1px 6px", borderRadius: 10, background: dim(p.color), color: p.color }}>{p.badge}</span>}
+                      {p.status && <span style={{ fontSize: 8, color: C.dim }}>Pronto</span>}
                     </button>
                   );
-                })}
+                  })}
+                </div>}
               </div>
             );
           })}
+          </nav>
 
           <button onClick={signOut} style={{ marginTop: "auto", width: "100%", padding: "9px", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
             Cerrar sesión
           </button>
-        </div>
+        </aside>
 
         {/* Main */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-          <div style={{ borderBottom: `1px solid ${C.border}`, padding: "12px 28px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: 13, color: C.muted }}>
+        <main className="app-main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <header className="app-header" style={{ borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="Abrir navegación">☰</button>
+              <div className="page-title" style={{ fontSize: 13, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {active.id === "patient-detail" && active.patient ? `Pacientes / ${active.patient.nombre} ${active.patient.apellido}` : (activePlugin?.name || "")}
+              </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ position: "relative" }}>
@@ -5191,23 +5167,23 @@ export default function App() {
                 {showNotis && (
                   <div style={{ position: "absolute", right: 0, top: 42, width: 330, maxHeight: 400, overflowY: "auto", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 8, zIndex: 60, boxShadow: "0 10px 34px rgba(0,0,0,0.45)" }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, letterSpacing: 1, padding: "6px 8px 8px" }}>🔔 AVISOS DE PACIENTES</div>
-                    {notis.length === 0 ? <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>No hay avisos todavía. Cuando un paciente confirme o pida una cita, aparece acá.</div> : notis.map(n => (
+                    {notis.length === 0 ? <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>No hay avisos todavía. Cuando un paciente confirme o solicite una cita, aparecerá aquí.</div> : notis.map(n => (
                       <div key={n.id} onClick={() => { const p = patients.find(x => String(x.id) === String(n.paciente_id)); setShowNotis(false); if (p) navigate("patient-detail", p); }} title="Abrir la ficha del paciente" style={{ padding: "9px 8px", borderTop: `1px solid ${C.border}`, cursor: "pointer", borderRadius: 8 }} onMouseEnter={e => e.currentTarget.style.background = C.bg} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                         <div style={{ fontSize: 12.5, color: C.text, lineHeight: 1.45 }}>{n.tipo === "cita_solicitada" ? "📅 " : "✓ "}{n.mensaje}</div>
-                        <div style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{n.created_at ? new Date(n.created_at).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""} · tocá para abrir la ficha</div>
+                        <div style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{n.created_at ? new Date(n.created_at).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""} · abre la ficha</div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
               <button onClick={abrirConfig} title="Configurar teleconsulta (WhatsApp / teléfono)" style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "6px 10px", fontSize: 15, cursor: "pointer" }}>⚙️</button>
-              <span style={{ fontSize: 12, color: C.muted }}>{DEMO_CREDENTIALS[rol]?.icon} {user.email}</span>
-              <Avatar name={user.email} size={30} color={DEMO_CREDENTIALS[rol]?.color || C.primary} />
-              <button onClick={signOut} title="Salir y volver a la pantalla de inicio" style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>
+              <span className="user-email" style={{ fontSize: 12, color: C.muted }}>{user.email}</span>
+              <Avatar name={user.email} size={30} color={rol === "admin" ? C.warning : C.primary} />
+              <button className="signout-button" onClick={signOut} title="Salir y volver a la pantalla de inicio" style={{ alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, color: C.muted, borderRadius: 9, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>↩ Salir</button>
             </div>
-          </div>
+          </header>
 
-          <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>
+          <div className="app-content" style={{ flex: 1, overflowY: "auto" }}>
             {active.id === "patient-detail" && active.patient ? (
               <ErrorBoundary key={active.patient && active.patient.id}><PatientDetailPlugin patient={active.patient} sessions={sessions} onAddSession={addSession} navigate={navigate} plugins={pluginRegistry} /></ErrorBoundary>
             ) : (
@@ -5224,7 +5200,7 @@ export default function App() {
               /></ErrorBoundary>
             )}
           </div>
-        </div>
+        </main>
       </div>
     </AppCtx.Provider>
   );
