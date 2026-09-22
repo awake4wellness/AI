@@ -316,6 +316,25 @@ export const CoreServices = {
     return d;
   },
   signOut() { localStorage.removeItem("a4w_token"); localStorage.removeItem("a4w_user"); localStorage.removeItem("a4w_refresh"); localStorage.removeItem("a4w_expires"); },
+  async requestPasswordReset(email) {
+    const redirectTo = `${window.location.origin}/`;
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY },
+      body: JSON.stringify({ email }),
+    });
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok, error: r.ok ? null : (d.msg || d.message || d.error_description || "No se pudo enviar el enlace") };
+  },
+  async updatePassword(accessToken, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${accessToken}` },
+      body: JSON.stringify({ password }),
+    });
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok, error: r.ok ? null : (d.msg || d.message || d.error_description || "No se pudo actualizar la contraseña") };
+  },
   async rpc(fn, args) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: "POST", headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }, body: JSON.stringify(args || {}) });
     try { return await r.json(); } catch { return null; }
@@ -443,19 +462,6 @@ const PLUGIN_GROUPS = {
   business:  { label: "Negocio",        icon: "💼" },
   education: { label: "Educación",      icon: "📚" },
 };
-
-// ─── DEMO DATA ────────────────────────────────────────────────
-const DEMO_PATIENTS = [
-  { id: "1", nombre: "Carlos", apellido: "Mendoza", edad: 34, condicion_principal: "Tendinopatía rotuliana", nivel_actividad: "Atleta", email: "carlos@demo.com" },
-  { id: "2", nombre: "Ana Sofía", apellido: "Reyes", edad: 28, condicion_principal: "Esguince tobillo grado II", nivel_actividad: "Moderado", email: "ana@demo.com" },
-  { id: "3", nombre: "Jorge", apellido: "Villalobos", edad: 52, condicion_principal: "Artrosis de rodilla", nivel_actividad: "Leve", email: "jorge@demo.com" },
-  { id: "4", nombre: "María F.", apellido: "Castro", edad: 41, condicion_principal: "Dolor lumbar crónico", nivel_actividad: "Sedentario", email: "maria@demo.com" },
-];
-const DEMO_SESSIONS = [
-  { id: "s1", paciente_id: "1", numero_sesion: 7, protocolo: "HILT", eva_pre: 6, eva_post: 3, fecha: new Date().toISOString(), notas: "Buena respuesta", duracion_minutos: 20 },
-  { id: "s2", paciente_id: "2", numero_sesion: 3, protocolo: "Crioterapia", eva_pre: 8, eva_post: 5, fecha: new Date(Date.now() - 86400000).toISOString(), notas: "Mejoría evidente", duracion_minutos: 15 },
-  { id: "s3", paciente_id: "3", numero_sesion: 12, protocolo: "Rehabilitación", eva_pre: 4, eva_post: 2, fecha: new Date(Date.now() - 86400000 * 3).toISOString(), notas: "Excelente progreso", duracion_minutos: 45 },
-];
 
 // ─────────────────────────────────────────────────────────────
 // 6. BUILT-IN PLUGINS (los que vienen de fábrica)
@@ -4936,8 +4942,13 @@ function LoginScreen({ onLogin }) {
   const C = DS.colors;
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const recoveryParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const recoveryToken = recoveryParams.get("type") === "recovery" ? recoveryParams.get("access_token") : null;
 
   async function entrar() {
     if (!email.trim() || !pass) { setError("Escribe tu correo y contraseña."); return; }
@@ -4955,8 +4966,37 @@ function LoginScreen({ onLogin }) {
     } finally { setLoading(false); }
   }
 
+  async function recuperar() {
+    if (!email.trim()) { setError("Escribe primero el correo de tu cuenta."); return; }
+    setLoading(true); setError(""); setNotice("");
+    const result = await CoreServices.requestPasswordReset(email.trim());
+    setLoading(false);
+    if (!result.ok) { setError(result.error); return; }
+    setNotice("Revisa tu correo. Te enviamos un enlace seguro para crear una contraseña nueva.");
+  }
+
+  async function guardarNuevaContrasena() {
+    if (pass.length < 8) { setError("La contraseña debe tener al menos 8 caracteres."); return; }
+    if (pass !== confirmPass) { setError("Las contraseñas no coinciden."); return; }
+    setLoading(true); setError("");
+    const result = await CoreServices.updatePassword(recoveryToken, pass);
+    setLoading(false);
+    if (!result.ok) { setError(result.error); return; }
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setPass(""); setConfirmPass("");
+    setNotice("Contraseña actualizada. Ya puedes ingresar con tu correo.");
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: DS.font, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <Modal open={showPrivacy} onClose={() => setShowPrivacy(false)} title="Privacidad y uso responsable" width={620}>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.7 }}>
+          <p style={{ marginTop: 0 }}><strong style={{ color: C.text }}>Acceso privado.</strong> La información clínica solo debe consultarse desde cuentas autorizadas y enlaces seguros compartidos con cada paciente.</p>
+          <p><strong style={{ color: C.text }}>Consentimiento.</strong> Antes de registrar datos, imágenes o documentos, el profesional debe contar con la autorización correspondiente del paciente.</p>
+          <p><strong style={{ color: C.text }}>Uso clínico.</strong> Las recomendaciones de la plataforma y de ALEX son herramientas de apoyo. La valoración, el diagnóstico y la decisión final corresponden al profesional responsable.</p>
+          <p style={{ marginBottom: 0 }}><strong style={{ color: C.text }}>Emergencias.</strong> Awake4Wellness no sustituye los servicios de emergencia. Ante síntomas graves o urgentes, llama al 911 o acude al centro de urgencias más cercano.</p>
+        </div>
+      </Modal>
       <div style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: dim(C.teal), border: `1px solid ${C.teal}35`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 12 }}>🌿</div>
@@ -4965,21 +5005,26 @@ function LoginScreen({ onLogin }) {
         </div>
 
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.teal, letterSpacing: 1.5, marginBottom: 16 }}>ACCESO PROFESIONAL</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.teal, letterSpacing: 1.5, marginBottom: 16 }}>{recoveryToken ? "CREAR CONTRASEÑA NUEVA" : "ACCESO PROFESIONAL"}</div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <Input label="Correo" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" />
-            <Input label="Contraseña" type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" />
+            {!recoveryToken && <Input label="Correo" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" />}
+            <Input label={recoveryToken ? "Contraseña nueva" : "Contraseña"} type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" />
+            {recoveryToken && <Input label="Confirmar contraseña" type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="••••••••" />}
           </div>
 
           {error && <div style={{ marginTop: 12, fontSize: 12, color: C.danger }}>{error}</div>}
+          {notice && <div style={{ marginTop: 12, fontSize: 12, color: C.success, lineHeight: 1.5 }}>{notice}</div>}
 
-          <Btn color={C.teal} fullWidth onClick={entrar} disabled={loading} style={{ marginTop: 18, padding: "13px" }}>
-            {loading ? "Entrando..." : "Entrar →"}
+          <Btn color={C.teal} fullWidth onClick={recoveryToken ? guardarNuevaContrasena : entrar} disabled={loading} style={{ marginTop: 18, padding: "13px" }}>
+            {loading ? "Procesando..." : (recoveryToken ? "Guardar contraseña" : "Entrar →")}
           </Btn>
 
+          {!recoveryToken && <button onClick={recuperar} disabled={loading} style={{ width: "100%", marginTop: 12, background: "transparent", border: "none", color: C.primary, fontSize: 12, fontWeight: 700, cursor: loading ? "default" : "pointer" }}>¿Olvidaste tu contraseña?</button>}
+
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.muted, textAlign: "center", lineHeight: 1.55 }}>
-            Los pacientes acceden únicamente desde el enlace seguro compartido por su profesional.
+            Los pacientes acceden únicamente desde el enlace seguro compartido por su profesional.<br />
+            <button onClick={() => setShowPrivacy(true)} style={{ marginTop: 6, background: "transparent", border: "none", color: C.teal, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>Privacidad, consentimiento y uso responsable</button>
           </div>
         </div>
       </div>
@@ -5033,13 +5078,22 @@ export default function App() {
   }
 
   useEffect(() => {
-    CoreServices.query("patients").then(({ data }) => {
-      if (data && data.length) setPatients(data);
+    if (!user || (user.rol !== "medico" && user.rol !== "admin")) {
+      setPatients([]);
+      setSessions([]);
+      return undefined;
+    }
+    let vivo = true;
+    Promise.all([
+      CoreServices.query("patients"),
+      CoreServices.query("sessions"),
+    ]).then(([patientResult, sessionResult]) => {
+      if (!vivo) return;
+      setPatients(Array.isArray(patientResult.data) ? patientResult.data : []);
+      setSessions(Array.isArray(sessionResult.data) ? sessionResult.data : []);
     });
-    CoreServices.query("sessions").then(({ data }) => {
-      if (data && data.length) setSessions(data);
-    });
-  }, []);
+    return () => { vivo = false; };
+  }, [user]);
 
   function navigate(id, patient = null) {
     setActive({ id, patient: patient || (id === "patient-detail" ? active.patient : null) });
