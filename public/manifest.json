@@ -2,7 +2,14 @@
   "short_name": "Awake4",
   "name": "Awake4Wellness Plataforma Clínica",
   "description": "Gestión clínica, seguimiento y recuperación personalizada.",
-  "icons": [],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
   "start_url": "/",
   "display": "standalone",
   "theme_color": "#10B8A6",
